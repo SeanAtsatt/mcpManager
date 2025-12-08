@@ -11,6 +11,7 @@ Managing MCPs in Claude Code requires manual command-line operations (`claude mc
 - Interactive `/mcp-manage` slash command for Claude Code
 - Shell helpers for terminal-based management
 - Profile support for common workflow presets
+- Archive management for soft-deleting unused MCPs
 
 ## Quick Start
 
@@ -18,17 +19,23 @@ Managing MCPs in Claude Code requires manual command-line operations (`claude mc
 
 - [Claude Code CLI](https://claude.ai/claude-code) installed
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) running (for Docker MCP servers)
+- Python 3.x (for helper scripts)
 - macOS or Linux (Windows WSL supported)
 
 ### Installation
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/mcpManager.git
+   git clone https://github.com/SeanAtsatt/mcpManager.git
    cd mcpManager
    ```
 
-2. **Run the setup script:**
+2. **Run build validation:**
+   ```bash
+   ./scripts/build.sh
+   ```
+
+3. **Run the setup script:**
    ```bash
    ./scripts/setup.sh
    ```
@@ -39,12 +46,12 @@ Managing MCPs in Claude Code requires manual command-line operations (`claude mc
    - Install shell helpers (`mcp-helpers.sh`)
    - Install the `/mcp-manage` slash command
 
-3. **Source the shell helpers** (add to your `~/.zshrc` or `~/.bashrc`):
+4. **Source the shell helpers** (add to your `~/.zshrc` or `~/.bashrc`):
    ```bash
    source ~/.config/claude-mcp/mcp-helpers.sh
    ```
 
-4. **Verify installation:**
+5. **Verify installation:**
    ```bash
    mcp-status
    ```
@@ -67,19 +74,40 @@ This provides:
 - **Status View** - See enabled MCPs and context token usage
 - **Enable/Disable** - Toggle specific MCPs on/off
 - **Discovery** - Browse and add MCPs from Docker catalog
+- **Profiles** - Apply or create workflow presets
+- **Archives** - View and restore archived MCPs
 - **Save/Load** - Manage project configurations
 
 ### From Terminal
 
+#### Interactive CLI
 ```bash
-# Show current MCP status
-mcp-status
+./scripts/run.sh
+```
 
-# Apply project config from current directory
-mcp-apply
+Launches an interactive menu for all MCP management operations.
 
-# List enabled MCPs (native Claude CLI)
-claude mcp list
+#### Shell Commands
+```bash
+# Status and info
+mcp-status      # Show enabled MCPs with token usage
+mcp-list        # List all available MCPs in registry
+mcp-profiles    # List available profiles
+
+# Apply configurations
+mcp-apply       # Apply .mcp-project.json from current directory
+mcp-profile <name>  # Apply a named profile
+
+# Search and discover
+mcp-search <term>   # Search MCPs by keyword
+
+# Save configurations
+mcp-save [name]     # Save current MCPs to .mcp-project.json
+mcp-profile-create <name> [description]  # Create profile from current MCPs
+
+# Archive management
+mcp-archive <name> [reason]  # Archive an MCP
+mcp-restore <name>           # Restore from archive
 ```
 
 ## Project Configuration
@@ -114,6 +142,21 @@ The global registry (`~/.config/claude-mcp/registry.json`) is the single source 
 ```json
 {
   "version": "1.0",
+  "last_updated": "2024-12-07T19:00:00Z",
+  "profiles": {
+    "minimal": {
+      "description": "Just the Docker Gateway for docs lookup",
+      "mcps": ["MCP_DOCKER"],
+      "created": "2024-12-07",
+      "last_used": null
+    },
+    "aws-dev": {
+      "description": "AWS development with full tooling",
+      "mcps": ["MCP_DOCKER", "aws-api"],
+      "created": "2024-12-07",
+      "last_used": null
+    }
+  },
   "servers": {
     "MCP_DOCKER": {
       "status": "active",
@@ -126,14 +169,18 @@ The global registry (`~/.config/claude-mcp/registry.json`) is the single source 
       ],
       "command": ["docker", "mcp", "gateway", "run"],
       "context_tokens": 20000,
-      "tags": ["browser", "docs", "aws", "gateway"]
+      "tags": ["browser", "docs", "aws", "gateway"],
+      "added": "2024-12-07",
+      "last_used": "2024-12-07",
+      "use_count": 42,
+      "notes": "Primary gateway - includes most common tools"
     }
   },
-  "profiles": {
-    "minimal": {
-      "description": "Just Context7 for docs lookup",
-      "mcps": ["MCP_DOCKER"]
-    }
+  "archived": {},
+  "config": {
+    "default_profile": null,
+    "auto_apply_on_cd": false,
+    "sync_with_docker_catalog": true
   }
 }
 ```
@@ -143,12 +190,16 @@ The global registry (`~/.config/claude-mcp/registry.json`) is the single source 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `status` | Yes | "active" or "archived" |
-| `source` | Yes | "docker", "docker-gateway", "npx", "local" |
+| `source` | Yes | "docker", "docker-gateway", "npx", "local", "remote" |
 | `description` | Yes | Human-readable description |
 | `capabilities` | Yes | Array of specific capabilities |
 | `command` | Yes | Command array to launch the MCP |
 | `context_tokens` | Yes | Estimated context window usage |
 | `tags` | Yes | Keywords for searching/filtering |
+| `added` | Yes | Date MCP was added |
+| `last_used` | No | Date MCP was last enabled |
+| `use_count` | No | Number of times enabled |
+| `notes` | No | User notes about the MCP |
 
 ## Architecture
 
@@ -174,6 +225,15 @@ The global registry (`~/.config/claude-mcp/registry.json`) is the single source 
 | `MCP_DOCKER` | Docker Gateway - Playwright, Context7, AWS tools | ~20,000 |
 | `aws-api` | Standalone AWS CLI execution | ~2,000 |
 
+### Default Profiles
+
+| Profile | Description | MCPs |
+|---------|-------------|------|
+| `minimal` | Just docs lookup | MCP_DOCKER |
+| `aws-dev` | AWS development | MCP_DOCKER, aws-api |
+| `web-frontend` | Web development | MCP_DOCKER |
+| `data-engineering` | Data pipelines | MCP_DOCKER, aws-api |
+
 ### Discovering More MCPs
 
 The Docker MCP catalog contains 300+ servers. Discover them via:
@@ -181,6 +241,10 @@ The Docker MCP catalog contains 300+ servers. Discover them via:
 ```bash
 # From terminal
 docker mcp catalog show
+
+# Search for specific capabilities
+mcp-search database
+mcp-search aws
 
 # In Claude Code (with MCP_DOCKER enabled)
 # Use the mcp-find tool or /mcp-manage discovery
@@ -193,14 +257,66 @@ Categories include:
 - **Browser** - Playwright, Puppeteer
 - **AI/ML** - Various AI service integrations
 
-## Shell Helpers Reference
+## Development
 
-After sourcing `mcp-helpers.sh`:
+### Project Structure
 
-| Command | Description |
-|---------|-------------|
-| `mcp-status` | Show currently enabled MCPs |
-| `mcp-apply` | Apply `.mcp-project.json` from current directory |
+```
+mcpManager/
+├── README.md                 # This file
+├── CLAUDE.md                 # Claude Code session instructions
+├── .mcp-project.json         # MCP config for this project
+├── docs/
+│   ├── PRD.md               # Product Requirements Document
+│   └── testing_strategy.md  # Testing documentation
+├── src/
+│   ├── registry.json        # Registry template
+│   ├── mcp-helpers.sh       # Shell helpers source
+│   └── mcp-manage.md        # Slash command source
+├── scripts/
+│   ├── setup.sh             # Installation script
+│   ├── build.sh             # Build/validation script
+│   ├── test.sh              # Test runner
+│   └── run.sh               # Interactive CLI
+└── tests/                   # Test files (created at runtime)
+```
+
+### Scripts
+
+| Script | Description |
+|--------|-------------|
+| `./scripts/build.sh` | Validate source files, JSON, and shell syntax |
+| `./scripts/test.sh` | Run full test suite |
+| `./scripts/setup.sh` | Install to system |
+| `./scripts/run.sh` | Interactive CLI |
+
+### Running Tests
+
+```bash
+# Run all tests
+./scripts/test.sh
+
+# Run build validation only
+./scripts/build.sh
+```
+
+### Test Coverage
+
+The test suite includes:
+- **Unit tests** - JSON validation, schema compliance, syntax checks
+- **Integration tests** - Registry operations, archive/restore, profile management
+- **Validation tests** - Field types, enum values, references
+
+See `docs/testing_strategy.md` for detailed testing documentation.
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `./scripts/build.sh` to validate
+5. Run `./scripts/test.sh` to ensure tests pass
+6. Submit a pull request
 
 ## Troubleshooting
 
@@ -218,6 +334,7 @@ open -a Docker
 ### Permission issues
 ```bash
 chmod +x ~/.config/claude-mcp/mcp-helpers.sh
+chmod +x scripts/*.sh
 ```
 
 ### Registry file corrupted
@@ -227,38 +344,15 @@ cp ~/.config/claude-mcp/registry.json ~/.config/claude-mcp/registry.json.bak
 ./scripts/setup.sh
 ```
 
-## Development
-
-### Project Structure
-
-```
-mcpManager/
-├── README.md                 # This file
-├── CLAUDE.md                 # Claude Code session instructions
-├── .mcp-project.json         # MCP config for this project
-├── docs/
-│   └── PRD.md               # Product Requirements Document
-├── scripts/
-│   ├── setup.sh             # Installation script
-│   ├── build.sh             # Build script
-│   └── test.sh              # Test runner
-└── .claude/
-    └── settings.local.json  # Local Claude permissions
-```
-
-### Running Tests
-
+### Shell helpers not loading
 ```bash
-./scripts/test.sh
+# Check if sourced in shell config
+grep "mcp-helpers" ~/.zshrc ~/.bashrc
+
+# Add if missing
+echo 'source ~/.config/claude-mcp/mcp-helpers.sh' >> ~/.zshrc
+source ~/.zshrc
 ```
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests
-5. Submit a pull request
 
 ## License
 

@@ -1,7 +1,7 @@
 {
-  "project": "pdf2ppt",
-  "description": "PDF to PPTX converter with OCR and layout preservation",
+  "project": "mcpManager",
+  "description": "MCP Manager - Dynamic MCP server management for Claude Code",
   "enabled": ["MCP_DOCKER"],
-  "disabled": ["aws-api"],
-  "notes": "Minimal setup - just needs docs lookup. Enable aws-api if deploying."
+  "disabled": [],
+  "notes": "Development project for MCP Manager. Uses MCP_DOCKER for Context7 docs lookup."
 }
