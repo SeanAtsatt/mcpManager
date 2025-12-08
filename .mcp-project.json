@@ -1,7 +1,6 @@
 {
   "project": "mcpManager",
   "description": "MCP Manager - Dynamic MCP server management for Claude Code",
-  "enabled": ["MCP_DOCKER"],
-  "disabled": [],
-  "notes": "Development project for MCP Manager. Uses MCP_DOCKER for Context7 docs lookup."
+  "docker_mcps": ["playwright", "context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore", "aws-core-mcp-server"],
+  "notes": "Development project for MCP Manager. Uses full-stack profile for testing all features."
 }

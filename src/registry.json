@@ -1,71 +1,102 @@
 {
-  "version": "1.0",
-  "last_updated": "2024-12-07T19:00:00Z",
+  "version": "2.0",
+  "last_updated": "2024-12-07T20:00:00Z",
   "profiles": {
     "minimal": {
-      "description": "Just the Docker Gateway for docs lookup and basic tools",
-      "mcps": ["MCP_DOCKER"],
+      "description": "Basic documentation lookup only",
+      "docker_mcps": ["context7"],
       "created": "2024-12-07",
       "last_used": null
     },
     "aws-dev": {
       "description": "AWS development with full tooling",
-      "mcps": ["MCP_DOCKER", "aws-api"],
+      "docker_mcps": ["context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore"],
       "created": "2024-12-07",
       "last_used": null
     },
     "web-frontend": {
       "description": "Web development with browser automation and docs",
-      "mcps": ["MCP_DOCKER"],
+      "docker_mcps": ["playwright", "context7"],
+      "created": "2024-12-07",
+      "last_used": null
+    },
+    "full-stack": {
+      "description": "Full stack development with all common tools",
+      "docker_mcps": ["playwright", "context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore"],
       "created": "2024-12-07",
       "last_used": null
     },
     "data-engineering": {
       "description": "Data pipelines and database work",
-      "mcps": ["MCP_DOCKER", "aws-api"],
+      "docker_mcps": ["context7", "aws-api", "aws-documentation"],
       "created": "2024-12-07",
       "last_used": null
     }
   },
-  "servers": {
-    "MCP_DOCKER": {
-      "status": "active",
-      "source": "docker-gateway",
-      "description": "Docker MCP Gateway - A unified gateway that bundles multiple MCP servers including browser automation (Playwright), documentation lookup (Context7), AWS tools, and more. This is the recommended default for most projects.",
+  "docker_mcps": {
+    "playwright": {
+      "description": "Browser automation - navigate, click, type, take screenshots, interact with web pages",
       "capabilities": [
-        "Browser automation via Playwright (navigate, click, type, screenshot)",
-        "Documentation lookup via Context7 (fetch latest library docs)",
-        "AWS CLI execution with validation",
-        "AgentCore documentation search",
-        "Code execution in sandboxed environments",
-        "MCP server discovery and management"
+        "Navigate to URLs",
+        "Click elements",
+        "Type text into inputs",
+        "Take screenshots",
+        "Extract page content",
+        "Handle forms and dialogs"
       ],
-      "command": ["docker", "mcp", "gateway", "run"],
-      "context_tokens": 20000,
-      "tags": ["browser", "docs", "aws", "context7", "gateway", "playwright"],
-      "added": "2024-12-01",
-      "last_used": "2024-12-07",
-      "use_count": 42,
-      "notes": "Primary gateway - includes most common tools. Recommended for most projects."
+      "tags": ["browser", "automation", "testing", "web"],
+      "added": "2024-12-01"
+    },
+    "context7": {
+      "description": "Documentation lookup - fetch latest library and framework documentation",
+      "capabilities": [
+        "Search library documentation",
+        "Get up-to-date API references",
+        "Find code examples",
+        "Resolve library IDs"
+      ],
+      "tags": ["docs", "documentation", "libraries", "api"],
+      "added": "2024-12-01"
     },
     "aws-api": {
-      "status": "active",
-      "source": "docker",
-      "description": "Standalone AWS CLI MCP server. Executes AWS CLI commands with validation and proper error handling. Use this for dedicated AWS work when you don't need the full Docker Gateway overhead.",
+      "description": "AWS CLI execution - run any AWS CLI command with validation",
       "capabilities": [
-        "Execute any AWS CLI command",
+        "Execute AWS CLI commands",
         "Command validation before execution",
         "Support for all AWS services",
-        "Region and profile configuration",
-        "Pagination control for large results"
+        "Region and profile configuration"
       ],
-      "command": ["docker", "run", "-i", "--rm", "-v", "$HOME/.aws:/root/.aws:ro", "-e", "AWS_REGION=us-east-1", "-e", "AWS_PROFILE=default", "mcp/aws-api-mcp-server"],
-      "context_tokens": 2000,
       "tags": ["aws", "cli", "cloud", "infrastructure"],
-      "added": "2024-12-01",
-      "last_used": "2024-12-05",
-      "use_count": 15,
-      "notes": "Lighter weight than MCP_DOCKER for AWS-only work"
+      "added": "2024-12-01"
+    },
+    "aws-documentation": {
+      "description": "AWS documentation search - search and read AWS docs",
+      "capabilities": [
+        "Search AWS documentation",
+        "Read documentation pages",
+        "Get recommendations for related content"
+      ],
+      "tags": ["aws", "docs", "documentation"],
+      "added": "2024-12-01"
+    },
+    "amazon-bedrock-agentcore": {
+      "description": "AgentCore documentation - search Bedrock AgentCore platform docs",
+      "capabilities": [
+        "Search AgentCore documentation",
+        "Fetch AgentCore guides",
+        "Runtime and Memory documentation"
+      ],
+      "tags": ["aws", "bedrock", "agentcore", "ai"],
+      "added": "2024-12-01"
+    },
+    "aws-core-mcp-server": {
+      "description": "AWS core tools - additional AWS service integrations",
+      "capabilities": [
+        "Extended AWS service support",
+        "Core AWS operations"
+      ],
+      "tags": ["aws", "core", "cloud"],
+      "added": "2024-12-01"
     }
   },
   "archived": {},

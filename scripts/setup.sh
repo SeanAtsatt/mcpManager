@@ -53,12 +53,16 @@ today = datetime.now().strftime('%Y-%m-%d')
 with open('$CONFIG_DIR/registry.json', 'r') as f:
     reg = json.load(f)
 reg['last_updated'] = now
-for profile in reg['profiles'].values():
+for profile in reg.get('profiles', {}).values():
     if profile.get('created') is None:
         profile['created'] = today
-for server in reg['servers'].values():
+# Handle both old schema (servers) and new schema (docker_mcps)
+for server in reg.get('servers', {}).values():
     if server.get('added') is None:
         server['added'] = today
+for mcp in reg.get('docker_mcps', {}).values():
+    if mcp.get('added') is None:
+        mcp['added'] = today
 with open('$CONFIG_DIR/registry.json', 'w') as f:
     json.dump(reg, f, indent=2)
 "
