@@ -1,0 +1,7 @@
+{
+  "project": "pdf2ppt",
+  "description": "PDF to PPTX converter with OCR and layout preservation",
+  "enabled": ["MCP_DOCKER"],
+  "disabled": ["aws-api"],
+  "notes": "Minimal setup - just needs docs lookup. Enable aws-api if deploying."
+}

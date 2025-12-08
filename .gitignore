@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local Claude settings (contains user-specific permissions)
+.claude/settings.local.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Test output
+coverage/
+.nyc_output/
+
+# Environment variables (if used in future)
+.env
+.env.local
+.env.*.local
