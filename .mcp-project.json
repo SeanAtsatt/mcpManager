@@ -1,6 +1,6 @@
 {
   "project": "mcpManager",
   "description": "MCP Manager - Dynamic MCP server management for Claude Code",
-  "docker_mcps": ["playwright", "context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore", "aws-core-mcp-server"],
+  "docker_mcps": ["playwright", "context7"],
   "notes": "Development project for MCP Manager. Uses full-stack profile for testing all features."
 }

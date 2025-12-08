@@ -1,20 +1,12 @@
 # Project Instructions
 
-## MCP Configuration
-On session start, check `.mcp-project.json` against `docker mcp server ls`. If mismatched, suggest `/mcp-manage`.
+## Session Start
+Run `/startup` at the beginning of each session.
 
-## Session Initialization
-On new conversations: explore codebase structure, read README.md and docs/, review recent git commits.
-
-## Development Practices
-- Use Context7 MCP for current library/API documentation before coding
-- Add/update tests when adding or modifying features
-- Keep README.md and docs/ current with code changes
-- Use Playwright MCP for browser automation; check Context7 for best practices
-
-## Project Maintenance
-- Maintain build.sh, run.sh, test.sh scripts
-- Push to GitHub after significant changes
+## Development
+- Use Context7 MCP for library docs before coding
+- Add/update tests when modifying features
+- Keep README.md and docs/ current
 
 ## Scripts
 - `./scripts/build.sh` - Validate source files
