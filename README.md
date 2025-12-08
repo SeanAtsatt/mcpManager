@@ -313,13 +313,14 @@ mcpManager/
 
 ### Test Coverage
 
-The test suite (24 tests) includes:
+The test suite (26 tests) includes:
 
-**Unit Tests (10 tests)**
+**Unit Tests (12 tests)**
 - JSON validity and schema compliance
 - Required fields validation
 - Profile reference validation
 - Script syntax checks
+- Slash command validation (mcp-manage.md, startup.md)
 
 **Integration Tests (8 tests)**
 - Registry operations (read/write/modify)

@@ -191,6 +191,29 @@ else
     test_fail "mcp-manage.md is missing or empty"
 fi
 
+# Test 11: startup.md exists and is not empty
+test_start "startup.md slash command exists"
+if [ -s "$SRC_DIR/startup.md" ]; then
+    test_pass
+else
+    test_fail "startup.md is missing or empty"
+fi
+
+# Test 12: startup.md contains required sections
+test_start "startup.md contains required sections"
+MISSING_SECTIONS=$(python3 << 'PYTHON'
+content = open('src/startup.md').read()
+required = ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'MCP Status', 'Rules of Engagement']
+missing = [s for s in required if s not in content]
+print(' '.join(missing) if missing else '')
+PYTHON
+)
+if [ -z "$MISSING_SECTIONS" ]; then
+    test_pass
+else
+    test_fail "Missing sections: $MISSING_SECTIONS"
+fi
+
 echo ""
 
 # ============================================
