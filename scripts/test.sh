@@ -63,7 +63,7 @@ echo ""
 echo -e "${BOLD}Unit Tests${NC}"
 echo -e "────────────────────────────────────────"
 
-# Test 1: Registry JSON validity
+# Registry JSON validity
 test_start "Registry JSON is valid"
 if python3 -c "import json; json.load(open('$SRC_DIR/registry.json'))" 2>/dev/null; then
     test_pass
@@ -71,7 +71,7 @@ else
     test_fail "Invalid JSON in registry.json"
 fi
 
-# Test 2: Registry has required v2.0 keys
+# Registry has required v2.0 keys
 test_start "Registry has required top-level keys (v2.0 schema)"
 MISSING=$(python3 -c "
 import json
@@ -86,7 +86,7 @@ else
     test_fail "Missing keys: $MISSING"
 fi
 
-# Test 3: Registry version is 2.0
+# Registry version is 2.0
 test_start "Registry version is 2.0"
 RESULT=$(python3 -c "
 import json
@@ -99,7 +99,7 @@ else
     test_fail "Version is not 2.0"
 fi
 
-# Test 4: All docker_mcps have required fields
+# All docker_mcps have required fields
 test_start "All docker_mcps have required fields"
 RESULT=$(python3 << 'PYTHON'
 import json
@@ -119,7 +119,7 @@ else
     test_fail "Missing fields: $RESULT"
 fi
 
-# Test 5: Profile docker_mcps reference valid MCPs
+# Profile docker_mcps reference valid MCPs
 test_start "Profile docker_mcps reference valid MCPs"
 RESULT=$(python3 << 'PYTHON'
 import json
@@ -139,7 +139,7 @@ else
     test_fail "Invalid references: $RESULT"
 fi
 
-# Test 6: All profiles have required fields
+# All profiles have required fields
 test_start "All profiles have required fields"
 RESULT=$(python3 << 'PYTHON'
 import json
@@ -159,7 +159,7 @@ else
     test_fail "Missing fields: $RESULT"
 fi
 
-# Test 7: Shell helpers have valid syntax
+# Shell helpers have valid syntax
 test_start "Shell helpers have valid syntax"
 if bash -n "$SRC_DIR/mcp-helpers.sh" 2>/dev/null; then
     test_pass
@@ -167,7 +167,7 @@ else
     test_fail "Syntax errors in mcp-helpers.sh"
 fi
 
-# Test 8: Setup script has valid syntax
+# Setup script has valid syntax
 test_start "Setup script has valid syntax"
 if bash -n "$PROJECT_DIR/scripts/setup.sh" 2>/dev/null; then
     test_pass
@@ -175,7 +175,7 @@ else
     test_fail "Syntax errors in setup.sh"
 fi
 
-# Test 9: Build script has valid syntax
+# Build script has valid syntax
 test_start "Build script has valid syntax"
 if bash -n "$PROJECT_DIR/scripts/build.sh" 2>/dev/null; then
     test_pass
@@ -183,7 +183,7 @@ else
     test_fail "Syntax errors in build.sh"
 fi
 
-# Test 10: mcp-manage.md exists and is not empty
+# mcp-manage.md exists and is not empty
 test_start "mcp-manage.md slash command exists"
 if [ -s "$SRC_DIR/mcp-manage.md" ]; then
     test_pass
@@ -191,7 +191,7 @@ else
     test_fail "mcp-manage.md is missing or empty"
 fi
 
-# Test 11: startup.md exists and is not empty
+# startup.md exists and is not empty
 test_start "startup.md slash command exists"
 if [ -s "$SRC_DIR/startup.md" ]; then
     test_pass
@@ -199,11 +199,66 @@ else
     test_fail "startup.md is missing or empty"
 fi
 
-# Test 12: startup.md contains required sections
+# startup.md contains required sections
 test_start "startup.md contains required sections"
 MISSING_SECTIONS=$(python3 << 'PYTHON'
 content = open('src/startup.md').read()
-required = ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'MCP Status', 'Rules of Engagement']
+required = ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'Step 6', 'Step 7', 'Step 8', 'MCP Status', 'Rules of Engagement', 'Gateway', 'Project Issues']
+missing = [s for s in required if s not in content]
+print(' '.join(missing) if missing else '')
+PYTHON
+)
+if [ -z "$MISSING_SECTIONS" ]; then
+    test_pass
+else
+    test_fail "Missing sections: $MISSING_SECTIONS"
+fi
+
+# shutdown.md exists and is not empty
+test_start "shutdown.md slash command exists"
+if [ -s "$SRC_DIR/shutdown.md" ]; then
+    test_pass
+else
+    test_fail "shutdown.md is missing or empty"
+fi
+
+# shutdown.md contains required sections
+test_start "shutdown.md contains required sections"
+MISSING_SECTIONS=$(python3 << 'PYTHON'
+content = open('src/shutdown.md').read()
+required = ['Step 1', 'Step 2', 'Gateway', 'port']
+missing = [s for s in required if s not in content]
+print(' '.join(missing) if missing else '')
+PYTHON
+)
+if [ -z "$MISSING_SECTIONS" ]; then
+    test_pass
+else
+    test_fail "Missing sections: $MISSING_SECTIONS"
+fi
+
+# startup.md includes gateway management
+test_start "startup.md includes gateway management"
+if grep -q "docker mcp gateway run" "$SRC_DIR/startup.md" 2>/dev/null && \
+   grep -q "Multi-Project Support" "$SRC_DIR/startup.md" 2>/dev/null; then
+    test_pass
+else
+    test_fail "Gateway management not found in startup.md"
+fi
+
+# project-update.md exists and is not empty
+test_start "project-update.md slash command exists"
+if [ -s "$SRC_DIR/project-update.md" ]; then
+    test_pass
+else
+    test_fail "project-update.md is missing or empty"
+fi
+
+# project-update.md contains required sections
+test_start "project-update.md contains required sections"
+MISSING_SECTIONS=$(python3 << 'PYTHON'
+content = open('src/project-update.md').read()
+required = ['MCP Config Migration', 'Permissions Cleanup', 'servers', 'docker_mcps', 'schema_version', 'settings.local.json']
 missing = [s for s in required if s not in content]
 print(' '.join(missing) if missing else '')
 PYTHON
@@ -223,7 +278,7 @@ echo ""
 echo -e "${BOLD}Integration Tests${NC}"
 echo -e "────────────────────────────────────────"
 
-# Test 11: Setup script creates registry
+# Setup script creates registry
 test_start "Setup creates registry file"
 cp "$SRC_DIR/registry.json" "$TEST_CONFIG_DIR/registry.json"
 if [ -f "$TEST_CONFIG_DIR/registry.json" ]; then
@@ -232,7 +287,7 @@ else
     test_fail "Registry not created"
 fi
 
-# Test 12: Registry can be read and modified
+# Registry can be read and modified
 test_start "Registry can be modified"
 RESULT=$(python3 << PYTHON
 import json
@@ -254,7 +309,7 @@ else
     test_fail "$RESULT"
 fi
 
-# Test 13: Project config can be created (v2.0 schema)
+# Project config can be created (v2.0 schema)
 test_start "Project config can be created (v2.0 schema)"
 TEST_PROJECT_DIR="$TEST_TMP/test-project"
 mkdir -p "$TEST_PROJECT_DIR"
@@ -263,6 +318,7 @@ cat > "$TEST_PROJECT_DIR/.mcp-project.json" << 'EOF'
   "project": "test-project",
   "description": "Test project",
   "docker_mcps": ["playwright", "context7"],
+  "port": 8811,
   "notes": "Test notes"
 }
 EOF
@@ -272,7 +328,7 @@ else
     test_fail "Invalid project config"
 fi
 
-# Test 14: Project config fields can be parsed
+# Project config fields can be parsed
 test_start "Project config fields can be parsed"
 RESULT=$(python3 << PYTHON
 import json
@@ -289,7 +345,146 @@ else
     test_fail "Could not parse config fields"
 fi
 
-# Test 15: Archive operation works
+# Project config port field can be parsed
+test_start "Project config port field can be parsed"
+RESULT=$(python3 << PYTHON
+import json
+config = json.load(open('$TEST_PROJECT_DIR/.mcp-project.json'))
+port = config.get('port')
+if port == 8811 and isinstance(port, int):
+    print('OK')
+else:
+    print('FAIL')
+PYTHON
+)
+if [ "$RESULT" = "OK" ]; then
+    test_pass
+else
+    test_fail "Could not parse port field"
+fi
+
+# Schema migration - servers to docker_mcps
+test_start "Schema migration: servers -> docker_mcps"
+OLD_CONFIG_DIR="$TEST_TMP/old-config-test"
+mkdir -p "$OLD_CONFIG_DIR"
+cat > "$OLD_CONFIG_DIR/.mcp-project.json" << 'EOF'
+{
+  "project": "old-project",
+  "servers": ["playwright", "context7"]
+}
+EOF
+RESULT=$(python3 << PYTHON
+import json
+
+config_path = '$OLD_CONFIG_DIR/.mcp-project.json'
+config = json.load(open(config_path))
+
+# Apply migration
+if 'servers' in config and 'docker_mcps' not in config:
+    config['docker_mcps'] = config.pop('servers')
+
+if 'schema_version' not in config:
+    config['schema_version'] = '2.0'
+
+json.dump(config, open(config_path, 'w'), indent=2)
+
+# Verify
+config2 = json.load(open(config_path))
+if 'docker_mcps' in config2 and 'servers' not in config2 and config2.get('schema_version') == '2.0':
+    print('OK')
+else:
+    print('FAIL')
+PYTHON
+)
+if [ "$RESULT" = "OK" ]; then
+    test_pass
+else
+    test_fail "Migration failed"
+fi
+
+# Schema migration - mcps to docker_mcps
+test_start "Schema migration: mcps -> docker_mcps"
+cat > "$OLD_CONFIG_DIR/.mcp-project.json" << 'EOF'
+{
+  "project": "old-project-2",
+  "mcps": ["aws-api", "context7"]
+}
+EOF
+RESULT=$(python3 << PYTHON
+import json
+
+config_path = '$OLD_CONFIG_DIR/.mcp-project.json'
+config = json.load(open(config_path))
+
+# Apply migration
+if 'mcps' in config and 'docker_mcps' not in config:
+    config['docker_mcps'] = config.pop('mcps')
+
+if 'schema_version' not in config:
+    config['schema_version'] = '2.0'
+
+json.dump(config, open(config_path, 'w'), indent=2)
+
+# Verify
+config2 = json.load(open(config_path))
+if 'docker_mcps' in config2 and 'mcps' not in config2 and config2.get('schema_version') == '2.0':
+    print('OK')
+else:
+    print('FAIL')
+PYTHON
+)
+if [ "$RESULT" = "OK" ]; then
+    test_pass
+else
+    test_fail "Migration failed"
+fi
+
+# Schema migration preserves other fields
+test_start "Schema migration preserves other fields"
+cat > "$OLD_CONFIG_DIR/.mcp-project.json" << 'EOF'
+{
+  "project": "preserve-test",
+  "description": "Test description",
+  "servers": ["playwright"],
+  "port": 8815,
+  "notes": "Test notes"
+}
+EOF
+RESULT=$(python3 << PYTHON
+import json
+
+config_path = '$OLD_CONFIG_DIR/.mcp-project.json'
+config = json.load(open(config_path))
+
+# Apply migration
+if 'servers' in config and 'docker_mcps' not in config:
+    config['docker_mcps'] = config.pop('servers')
+
+if 'schema_version' not in config:
+    config['schema_version'] = '2.0'
+
+json.dump(config, open(config_path, 'w'), indent=2)
+
+# Verify all fields preserved
+config2 = json.load(open(config_path))
+checks = [
+    config2.get('project') == 'preserve-test',
+    config2.get('description') == 'Test description',
+    config2.get('port') == 8815,
+    config2.get('notes') == 'Test notes',
+    'docker_mcps' in config2,
+    'servers' not in config2
+]
+print('OK' if all(checks) else 'FAIL')
+PYTHON
+)
+if [ "$RESULT" = "OK" ]; then
+    test_pass
+else
+    test_fail "Fields not preserved"
+fi
+
+# Archive operation works
 test_start "Archive operation modifies registry"
 RESULT=$(python3 << PYTHON
 import json
@@ -328,7 +523,7 @@ else
     test_fail "Archive operation failed"
 fi
 
-# Test 16: Restore operation works
+# Restore operation works
 test_start "Restore operation modifies registry"
 RESULT=$(python3 << PYTHON
 import json
@@ -359,7 +554,7 @@ else
     test_fail "Restore operation failed"
 fi
 
-# Test 17: Profile creation works
+# Profile creation works
 test_start "Profile creation works"
 RESULT=$(python3 << PYTHON
 import json
@@ -391,7 +586,7 @@ else
     test_fail "Profile creation failed"
 fi
 
-# Test 18: Profile deletion works
+# Profile deletion works
 test_start "Profile deletion works"
 RESULT=$(python3 << PYTHON
 import json
@@ -426,7 +621,7 @@ echo ""
 echo -e "${BOLD}Validation Tests${NC}"
 echo -e "────────────────────────────────────────"
 
-# Test 19: Tags are non-empty arrays
+# Tags are non-empty arrays
 test_start "Tags are valid arrays"
 RESULT=$(python3 << 'PYTHON'
 import json
@@ -445,7 +640,7 @@ else
     test_fail "Invalid tags for: $RESULT"
 fi
 
-# Test 20: Capabilities are non-empty arrays
+# Capabilities are non-empty arrays
 test_start "Capabilities are valid arrays"
 RESULT=$(python3 << 'PYTHON'
 import json
@@ -464,7 +659,7 @@ else
     test_fail "Invalid capabilities for: $RESULT"
 fi
 
-# Test 21: Config section has expected keys
+# Config section has expected keys
 test_start "Config section has expected keys"
 RESULT=$(python3 << 'PYTHON'
 import json
@@ -481,7 +676,7 @@ else
     test_fail "Missing config keys: $RESULT"
 fi
 
-# Test 22: Archived section exists (even if empty)
+# Archived section exists (even if empty)
 test_start "Archived section exists"
 RESULT=$(python3 -c "
 import json
@@ -494,7 +689,7 @@ else
     test_fail "Archived section missing or invalid"
 fi
 
-# Test 23: mcp-manage.md contains archive feature
+# mcp-manage.md contains archive feature
 test_start "mcp-manage.md includes archive management"
 if grep -q "Manage Archives" "$SRC_DIR/mcp-manage.md" 2>/dev/null; then
     test_pass
@@ -502,7 +697,7 @@ else
     test_fail "Archive management not found in mcp-manage.md"
 fi
 
-# Test 24: mcp-manage.md uses correct docker mcp commands
+# mcp-manage.md uses correct docker mcp commands
 test_start "mcp-manage.md uses correct docker mcp server commands"
 if grep -q "docker mcp server enable" "$SRC_DIR/mcp-manage.md" 2>/dev/null && \
    grep -q "docker mcp server disable" "$SRC_DIR/mcp-manage.md" 2>/dev/null; then

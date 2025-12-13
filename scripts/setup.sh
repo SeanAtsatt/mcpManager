@@ -75,10 +75,16 @@ cp "$SRC_DIR/mcp-helpers.sh" "$CONFIG_DIR/mcp-helpers.sh"
 chmod +x "$CONFIG_DIR/mcp-helpers.sh"
 echo -e "  ${GREEN}✓ Shell helpers installed${NC}"
 
-# Install slash command
-echo -e "${CYAN}Installing /mcp-manage command...${NC}"
+# Install slash commands
+echo -e "${CYAN}Installing slash commands...${NC}"
 cp "$SRC_DIR/mcp-manage.md" "$COMMANDS_DIR/mcp-manage.md"
-echo -e "  ${GREEN}✓ Slash command installed${NC}"
+echo -e "  ${GREEN}✓ /mcp-manage installed${NC}"
+cp "$SRC_DIR/startup.md" "$COMMANDS_DIR/startup.md"
+echo -e "  ${GREEN}✓ /startup installed${NC}"
+cp "$SRC_DIR/shutdown.md" "$COMMANDS_DIR/shutdown.md"
+echo -e "  ${GREEN}✓ /shutdown installed${NC}"
+cp "$SRC_DIR/project-update.md" "$COMMANDS_DIR/project-update.md"
+echo -e "  ${GREEN}✓ /project-update installed${NC}"
 
 echo ""
 echo -e "${GREEN}${BOLD}Setup complete!${NC}"

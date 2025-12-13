@@ -87,6 +87,19 @@ This provides:
 - **Archives** - View and restore archived MCPs
 - **Save/Load** - Manage project configurations
 
+#### Session Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/startup` | Initialize session - reads project, checks MCPs, starts gateway, reports issues |
+| `/shutdown` | End session - stops gateway, offers to commit changes |
+| `/project-update` | Fix detected issues - migrates config schema, cleans up files |
+
+**Recommended workflow:**
+1. Run `/startup` at the beginning of each session
+2. If issues detected, run `/project-update` to fix them
+3. Run `/shutdown` when ending the session
+
 ### Docker MCP Commands
 
 ```bash
@@ -126,9 +139,11 @@ Create a `.mcp-project.json` in your project root:
 
 ```json
 {
+  "schema_version": "2.0",
   "project": "my-project",
   "description": "Description of what this project does",
   "docker_mcps": ["playwright", "context7", "aws-api"],
+  "port": 8811,
   "notes": "Optional notes about this configuration"
 }
 ```
@@ -137,10 +152,116 @@ Create a `.mcp-project.json` in your project root:
 
 | Field | Required | Description |
 |-------|----------|-------------|
+| `schema_version` | No | Config schema version (auto-added during migration) |
 | `project` | Yes | Project name identifier |
 | `description` | No | Human-readable project description |
 | `docker_mcps` | Yes | Array of Docker MCP server names to enable |
+| `port` | No | Gateway port for multi-project support (8811-8899) |
 | `notes` | No | Additional notes about the configuration |
+
+### Schema Migration
+
+The `/startup` command automatically migrates old config formats:
+
+| Old Format | New Format |
+|------------|------------|
+| `servers: [...]` | `docker_mcps: [...]` |
+| `mcps: [...]` | `docker_mcps: [...]` |
+| (no version) | `schema_version: "2.0"` |
+
+Migration happens automatically and preserves all other fields.
+
+## Multi-Project Support
+
+MCP Manager supports running **multiple projects simultaneously** with different MCP configurations. This is achieved by running dedicated gateway instances on separate ports.
+
+### Architecture
+
+```
+SINGLE GATEWAY (Default - Shared Config):
+┌──────────────────────────────────────────────────────────────────┐
+│ All Claude Code Sessions                                          │
+│                                                                   │
+│   MCP_DOCKER ──────────────────┐                                 │
+│   (stdio transport)            │                                 │
+│                                ▼                                 │
+│                    ┌─────────────────────┐                       │
+│                    │   Docker Gateway    │                       │
+│                    │   (Single Instance) │                       │
+│                    │                     │                       │
+│                    │   ~/.docker/mcp/    │                       │
+│                    │   registry.yaml     │ ◄── Shared config     │
+│                    └─────────────────────┘                       │
+└──────────────────────────────────────────────────────────────────┘
+
+MULTIPLE GATEWAYS (Per-Project Config):
+┌──────────────────────────────────────────────────────────────────┐
+│ Session A (Project A)          Session B (Project B)              │
+│                                                                   │
+│   localhost:8811 ──┐           localhost:8812 ──┐                │
+│   (SSE transport)  │           (SSE transport)  │                │
+│                    ▼                            ▼                │
+│      ┌─────────────────┐           ┌─────────────────┐          │
+│      │  Gateway A      │           │  Gateway B      │          │
+│      │  Port: 8811     │           │  Port: 8812     │          │
+│      │  playwright     │           │  aws-api        │          │
+│      │  context7       │           │  aws-docs       │          │
+│      └─────────────────┘           └─────────────────┘          │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### How It Works
+
+1. **Add `port` to `.mcp-project.json`**: This tells MCP Manager to use a dedicated gateway
+2. **Run `/startup`**: Automatically starts a gateway on the configured port
+3. **Work independently**: Each project has its own isolated MCP tools
+4. **Run `/shutdown`**: Stops the gateway when you're done
+
+### Example Setup
+
+**Project A** (Web development):
+```json
+{
+  "project": "webapp",
+  "docker_mcps": ["playwright", "context7"],
+  "port": 8811
+}
+```
+
+**Project B** (AWS infrastructure):
+```json
+{
+  "project": "infra",
+  "docker_mcps": ["aws-api", "aws-documentation", "context7"],
+  "port": 8812
+}
+```
+
+### Gateway Commands
+
+The gateway runs via the Docker MCP CLI:
+
+```bash
+# Start a gateway manually (done automatically by /startup)
+docker mcp gateway run \
+  --servers=playwright,context7 \
+  --transport=sse \
+  --port=8811
+
+# Check if gateway is running
+lsof -i :8811 | grep LISTEN
+
+# Stop gateway (done automatically by /shutdown)
+pkill -f "docker mcp gateway.*--port=8811"
+```
+
+### Key Points
+
+- **Port Range**: Use ports 8811-8899 for project gateways
+- **Isolation**: Each gateway only has the servers you specify
+- **Catalog Access**: All gateways use the shared Docker MCP catalog (311+ servers)
+- **Session Lifecycle**: `/startup` starts, `/shutdown` stops the gateway
+- **No Port = Shared**: Projects without `port` use the shared MCP_DOCKER gateway
 
 ## Global Registry (v2.0 Schema)
 
@@ -293,11 +414,14 @@ mcpManager/
 ├── src/
 │   ├── registry.json        # Registry template (v2.0 schema)
 │   ├── mcp-helpers.sh       # Shell helpers source
-│   └── mcp-manage.md        # Slash command source
+│   ├── mcp-manage.md        # /mcp-manage slash command
+│   ├── startup.md           # /startup slash command
+│   ├── shutdown.md          # /shutdown slash command
+│   └── project-update.md    # /project-update slash command
 └── scripts/
     ├── setup.sh             # Installation script
     ├── build.sh             # Build/validation script
-    ├── test.sh              # Test runner (24 tests)
+    ├── test.sh              # Test runner (auto-numbered)
     └── run.sh               # Interactive CLI
 ```
 
@@ -313,20 +437,21 @@ mcpManager/
 
 ### Test Coverage
 
-The test suite (26 tests) includes:
+The test suite includes 35 auto-numbered tests:
 
-**Unit Tests (12 tests)**
+**Unit Tests (17 tests)**
 - JSON validity and schema compliance
 - Required fields validation
 - Profile reference validation
 - Script syntax checks
-- Slash command validation (mcp-manage.md, startup.md)
+- Slash command validation (mcp-manage.md, startup.md, shutdown.md, project-update.md)
 
-**Integration Tests (8 tests)**
+**Integration Tests (12 tests)**
 - Registry operations (read/write/modify)
 - Archive and restore workflows
 - Profile creation and deletion
 - Project config handling
+- Schema migration (servers/mcps → docker_mcps)
 
 **Validation Tests (6 tests)**
 - Field type validation

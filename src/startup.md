@@ -14,7 +14,41 @@ Get an overview of the current project:
 
 Run `git log --oneline -10` to see recent commits and understand what's been worked on.
 
-## Step 3: Check MCP Configuration
+## Step 3: Detect Project Issues
+
+Scan for project configuration issues that need attention. Do NOT auto-fix - just detect and report.
+
+### Issues to Detect
+
+```python
+import json
+import os
+
+issues = []
+
+# Check 1: MCP config uses old schema
+if os.path.exists('.mcp-project.json'):
+    with open('.mcp-project.json') as f:
+        config = json.load(f)
+    if 'servers' in config and 'docker_mcps' not in config:
+        issues.append("MCP config uses old 'servers' field")
+    if 'mcps' in config and 'docker_mcps' not in config:
+        issues.append("MCP config uses old 'mcps' field")
+    if 'schema_version' not in config:
+        issues.append("MCP config missing schema_version")
+
+# Check 2: Redundant local permissions file
+if os.path.exists('.claude/settings.local.json'):
+    issues.append("Redundant .claude/settings.local.json file")
+
+print(issues)
+```
+
+### Store Issues for Summary
+
+Keep track of detected issues to include in the final summary report. If issues are found, the summary will recommend running `/project-update`.
+
+## Step 4: Check MCP Configuration
 
 If `.mcp-project.json` exists in the project root:
 
@@ -23,7 +57,43 @@ If `.mcp-project.json` exists in the project root:
 3. Compare the two lists
 4. If there's a mismatch, report it and offer to sync using `/mcp-manage`
 
-## Step 4: Extract Rules of Engagement
+## Step 5: Manage Project Gateway (Multi-Project Support)
+
+If `.mcp-project.json` has a `port` field, this project uses a **dedicated gateway** for isolated MCP configuration. This allows multiple projects to run different MCP servers simultaneously.
+
+### Check Gateway Status
+
+1. Read the `port` value from `.mcp-project.json`
+2. Check if a gateway is already running on that port:
+   ```bash
+   lsof -i :<port> | grep LISTEN
+   ```
+
+### Start Gateway if Not Running
+
+If no gateway is running on the configured port:
+
+1. Get the server list from `docker_mcps` in `.mcp-project.json`
+2. Start the gateway in background:
+   ```bash
+   docker mcp gateway run \
+     --servers=<comma-separated-mcps> \
+     --transport=sse \
+     --port=<port> &
+   ```
+3. Wait a moment for startup, then verify it's running
+
+### Gateway Already Running
+
+If a gateway is already running on the port, report its status.
+
+### No Port Configured
+
+If `.mcp-project.json` exists but has no `port` field:
+- Use the shared MCP_DOCKER gateway (current behavior)
+- Sync MCPs via `docker mcp server enable/disable`
+
+## Step 6: Extract Rules of Engagement
 
 If `CLAUDE.md` exists, extract and summarize the key rules:
 
@@ -31,7 +101,7 @@ If `CLAUDE.md` exists, extract and summarize the key rules:
 2. Identify any scripts that should be used for building, testing, or running
 3. Note any special instructions (e.g., "use Context7 for docs", "always run tests")
 
-## Step 5: Report Summary
+## Step 7: Report Summary
 
 Present a brief summary:
 
@@ -46,6 +116,13 @@ MCP Status: <matched/mismatched>
   Required: <list from .mcp-project.json>
   Enabled:  <list from docker mcp server ls>
 
+Gateway: <status - see below>
+
+Project Issues: <none OR list issues>
+  • <issue 1>
+  • <issue 2>
+  → Run /project-update to fix
+
 Rules of Engagement:
   • <rule 1 from CLAUDE.md>
   • <rule 2 from CLAUDE.md>
@@ -58,7 +135,43 @@ Scripts:
 Ready to help!
 ```
 
-## Step 6: Offer Codebase Exploration
+### Project Issues Format
+
+If no issues detected:
+```
+Project Issues: None
+```
+
+If issues detected:
+```
+Project Issues: 2 found
+  • MCP config uses old 'servers' field
+  • Redundant .claude/settings.local.json file
+  → Run /project-update to fix
+```
+
+### Gateway Status Formats
+
+If project has a `port` configured:
+```
+Gateway: Running on port 8811 (dedicated)
+  Servers: playwright, context7
+  Endpoint: http://localhost:8811/sse
+```
+
+If gateway was just started:
+```
+Gateway: Started on port 8811 (dedicated)
+  Servers: playwright, context7
+  Endpoint: http://localhost:8811/sse
+```
+
+If no port configured (using shared gateway):
+```
+Gateway: Using shared MCP_DOCKER
+```
+
+## Step 8: Offer Codebase Exploration
 
 After presenting the summary, ask the user:
 
@@ -86,8 +199,11 @@ Proceed immediately with whatever task the user wants.
 
 ## Important
 
-- Complete Steps 1-5 before responding to ANY other user input
-- Step 6 (exploration offer) comes AFTER the summary
+- Complete Steps 1-7 before responding to ANY other user input
+- Step 8 (exploration offer) comes AFTER the summary
 - If files don't exist, skip that step silently
 - Keep the summary concise
 - If MCP mismatch detected, always mention it
+- If gateway fails to start, report the error and suggest checking Docker status
+- If project issues detected, always show them and recommend `/project-update`
+- Do NOT auto-fix issues - detection only, let `/project-update` handle fixes
