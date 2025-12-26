@@ -1,37 +1,39 @@
 # Project Update
 
-Run this command to apply pending updates and fixes to the current project's configuration.
+Run this command to migrate from old config format or fix project configuration issues.
 
 ## Overview
 
 This command performs maintenance tasks that `/startup` detected but didn't automatically fix. It handles:
 
-1. **MCP Config Migration** - Update `.mcp-project.json` to latest schema
+1. **Config Migration** - Migrate from `.mcp-project.json` to `.mcp.json` + `.docker-mcp.yaml`
 2. **Permissions Cleanup** - Remove redundant local permission files
-3. **Future updates** - Additional migrations will be added here
+3. **Missing Config** - Initialize project config if missing
 
 ## Step 1: Check for Issues
 
 Before making changes, scan for issues:
 
 ```python
-import json
 import os
+import json
+import yaml
 
 issues = []
 
-# Check 1: MCP config needs migration
+# Check 1: Old .mcp-project.json exists (needs migration)
 if os.path.exists('.mcp-project.json'):
-    with open('.mcp-project.json') as f:
-        config = json.load(f)
-    if 'servers' in config and 'docker_mcps' not in config:
-        issues.append('mcp_schema_servers')
-    if 'mcps' in config and 'docker_mcps' not in config:
-        issues.append('mcp_schema_mcps')
-    if 'schema_version' not in config:
-        issues.append('mcp_schema_version')
+    issues.append('migrate_old_config')
 
-# Check 2: Redundant local permissions file
+# Check 2: Missing .mcp.json
+if not os.path.exists('.mcp.json'):
+    issues.append('missing_mcp_json')
+
+# Check 3: Missing .docker-mcp.yaml (but .mcp.json exists)
+if os.path.exists('.mcp.json') and not os.path.exists('.docker-mcp.yaml'):
+    issues.append('missing_docker_yaml')
+
+# Check 4: Redundant local permissions file
 if os.path.exists('.claude/settings.local.json'):
     issues.append('redundant_local_settings')
 
@@ -49,8 +51,8 @@ Project Update
 ═══════════════════════════════════════════════════
 
 Issues detected:
-  • [mcp_schema_servers] .mcp-project.json uses old 'servers' field
-  • [mcp_schema_version] .mcp-project.json missing schema_version
+  • [migrate_old_config] Old .mcp-project.json needs migration
+  • [missing_mcp_json] Project missing .mcp.json
   • [redundant_local_settings] .claude/settings.local.json is redundant
 
 Ready to fix these issues?
@@ -63,38 +65,88 @@ Use AskUserQuestion with options:
 
 ## Step 3: Apply Updates
 
-### MCP Config Migration
+### Migrate Old Config
 
-If `mcp_schema_servers`, `mcp_schema_mcps`, or `mcp_schema_version` issues exist:
+If `migrate_old_config` issue exists:
 
 ```python
 import json
+import yaml
 
+# Read old config
 with open('.mcp-project.json') as f:
-    config = json.load(f)
+    old_config = json.load(f)
 
-changes = []
+# Extract server list
+servers = old_config.get('docker_mcps',
+           old_config.get('servers',
+           old_config.get('mcps', ['context7'])))
 
-# Migration 1: servers -> docker_mcps
-if 'servers' in config and 'docker_mcps' not in config:
-    config['docker_mcps'] = config.pop('servers')
-    changes.append("Renamed 'servers' to 'docker_mcps'")
+# Create .mcp.json
+mcp_json = {
+    "mcpServers": {
+        "project-docker-gateway": {
+            "command": "docker",
+            "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+        },
+        "claude-in-chrome": {
+            "enabled": True
+        }
+    }
+}
 
-# Migration 2: mcps -> docker_mcps
-if 'mcps' in config and 'docker_mcps' not in config:
-    config['docker_mcps'] = config.pop('mcps')
-    changes.append("Renamed 'mcps' to 'docker_mcps'")
+with open('.mcp.json', 'w') as f:
+    json.dump(mcp_json, f, indent=2)
 
-# Migration 3: Add schema version
-if 'schema_version' not in config:
-    config['schema_version'] = '2.0'
-    changes.append("Added schema_version: 2.0")
+# Create .docker-mcp.yaml
+docker_yaml = {
+    "servers": servers
+}
 
-with open('.mcp-project.json', 'w') as f:
-    json.dump(config, f, indent=2)
+with open('.docker-mcp.yaml', 'w') as f:
+    yaml.dump(docker_yaml, f, default_flow_style=False)
 
-for change in changes:
-    print(f"  ✓ {change}")
+# Backup and remove old config
+import shutil
+shutil.move('.mcp-project.json', '.mcp-project.json.bak')
+
+print("  ✓ Migrated .mcp-project.json to .mcp.json + .docker-mcp.yaml")
+print("  ✓ Old config backed up to .mcp-project.json.bak")
+```
+
+### Initialize Missing Config
+
+If `missing_mcp_json` or `missing_docker_yaml` issues exist:
+
+Offer to run `/mcp-manage > Initialize Project` instead, or create default configs:
+
+```python
+import json
+import yaml
+
+# Create default .mcp.json if missing
+if not os.path.exists('.mcp.json'):
+    mcp_json = {
+        "mcpServers": {
+            "project-docker-gateway": {
+                "command": "docker",
+                "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+            },
+            "claude-in-chrome": {
+                "enabled": True
+            }
+        }
+    }
+    with open('.mcp.json', 'w') as f:
+        json.dump(mcp_json, f, indent=2)
+    print("  ✓ Created .mcp.json")
+
+# Create default .docker-mcp.yaml if missing
+if not os.path.exists('.docker-mcp.yaml'):
+    docker_yaml = {"servers": ["context7"]}
+    with open('.docker-mcp.yaml', 'w') as f:
+        yaml.dump(docker_yaml, f, default_flow_style=False)
+    print("  ✓ Created .docker-mcp.yaml with default servers")
 ```
 
 ### Permissions Cleanup
@@ -123,25 +175,30 @@ Project Update Complete
 ═══════════════════════════════════════════════════
 
 Changes applied:
-  ✓ Renamed 'servers' to 'docker_mcps' in .mcp-project.json
-  ✓ Added schema_version: 2.0 to .mcp-project.json
+  ✓ Migrated .mcp-project.json to .mcp.json + .docker-mcp.yaml
+  ✓ Old config backed up to .mcp-project.json.bak
   ✓ Removed redundant .claude/settings.local.json
 
-Your project is now up to date!
+New config files:
+  .mcp.json         - Claude Code MCPs
+  .docker-mcp.yaml  - Docker gateway servers
+
+Restart your Claude Code session to use the new configuration.
 ```
 
-## Future Updates
+## Migration Reference
 
-As new maintenance tasks are added, document them here:
-
-| Version | Update | Description |
-|---------|--------|-------------|
-| 2.0 | MCP Schema | Migrate servers/mcps to docker_mcps |
-| 2.0 | Permissions | Clean up redundant local settings |
+| Old Format | New Format |
+|------------|------------|
+| `.mcp-project.json` | `.mcp.json` + `.docker-mcp.yaml` |
+| `docker_mcps: [...]` | `servers:` in `.docker-mcp.yaml` |
+| `servers: [...]` | `servers:` in `.docker-mcp.yaml` |
+| `mcps: [...]` | `servers:` in `.docker-mcp.yaml` |
+| `port: 8811` | (removed - Claude Code manages transport) |
 
 ## Notes
 
 - This command is idempotent - safe to run multiple times
 - Always shows what will change before applying
-- Backs up files before destructive operations (if needed)
+- Backs up old config before migration
 - Run `/startup` after to verify everything is working

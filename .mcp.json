@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "project-docker-gateway": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+    },
+    "claude-in-chrome": {
+      "enabled": true
+    }
+  }
+}

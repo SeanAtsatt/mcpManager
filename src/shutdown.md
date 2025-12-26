@@ -1,67 +1,23 @@
 # Session Shutdown
 
-Run this when ending a session to clean up project resources.
+Run this when ending a session to clean up and optionally commit changes.
 
-## Step 1: Stop Project Gateway
+## Overview
 
-If `.mcp-project.json` has a `port` field, stop the dedicated gateway:
+With the project-local architecture, the Docker gateway is managed automatically by Claude Code via `.mcp.json`. There's no need to manually stop gateways - they stop when the Claude Code session ends.
 
-### Find and Stop Gateway Process
-
-1. Read the `port` value from `.mcp-project.json`
-2. Find the gateway process:
-   ```bash
-   lsof -i :<port> -t
-   ```
-3. If a process is found, kill it:
-   ```bash
-   kill <pid>
-   ```
-4. Verify it stopped:
-   ```bash
-   lsof -i :<port> | grep LISTEN
-   ```
-
-### Alternative: Kill by Pattern
-
-If the above doesn't work, try:
-```bash
-pkill -f "docker mcp gateway.*--port=<port>"
-```
-
-### No Gateway Running
-
-If no gateway is running on the configured port, report that it was already stopped.
-
-### No Port Configured
-
-If `.mcp-project.json` has no `port` field, skip this step (shared gateway persists).
-
-## Step 2: Report Status
-
-Present a brief shutdown summary:
-
-```
-Session Shutdown
-═══════════════════════════════════════════════════
-
-Gateway: <status>
-  - Stopped gateway on port <port>
-  - OR: No dedicated gateway was running
-  - OR: Using shared gateway (no action needed)
-
-Session ended. See you next time!
-```
-
-## Step 3: Offer to Commit Changes (Optional)
-
-If there are uncommitted changes:
+## Step 1: Check for Uncommitted Changes
 
 ```bash
 git status --porcelain
 ```
 
-If changes exist, ask:
+If changes exist, proceed to Step 2. If no changes, skip to Step 3.
+
+## Step 2: Offer to Commit Changes
+
+If there are uncommitted changes, ask:
+
 ```
 You have uncommitted changes. Would you like to commit before ending?
 ```
@@ -70,9 +26,34 @@ Use AskUserQuestion with options:
 1. **Yes, commit changes** - Run through commit workflow
 2. **No, leave as is** - End session without committing
 
+### If "Yes, commit changes" selected:
+
+1. Run `git status` to show what will be committed
+2. Run `git diff --stat` to show change summary
+3. Ask for a commit message or generate one based on changes
+4. Stage and commit the changes
+
+## Step 3: Report Session Summary
+
+Present a brief shutdown summary:
+
+```
+Session Shutdown
+═══════════════════════════════════════════════════
+
+Changes: <committed/uncommitted/none>
+  - <summary of what was done this session>
+
+MCP Configuration:
+  - Gateway will stop automatically when session ends
+  - Config preserved in .mcp.json and .docker-mcp.yaml
+
+Session ended. See you next time!
+```
+
 ## Important
 
-- Always check for gateway before attempting to stop
-- Don't error if gateway isn't running
-- The shared MCP_DOCKER gateway should NOT be stopped (it persists across sessions)
-- Only stop gateways on ports defined in .mcp-project.json
+- The Docker gateway is managed by Claude Code and stops automatically
+- No manual gateway cleanup is needed
+- Focus on helping the user commit any work if desired
+- Keep the summary concise

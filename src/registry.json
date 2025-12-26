@@ -1,36 +1,64 @@
 {
   "version": "2.0",
-  "last_updated": "2024-12-07T20:00:00Z",
-  "profiles": {
+  "last_updated": "2024-12-26T00:00:00Z",
+  "templates": {
     "minimal": {
       "description": "Basic documentation lookup only",
-      "docker_mcps": ["context7"],
-      "created": "2024-12-07",
-      "last_used": null
+      "mcp_json": {
+        "mcpServers": {
+          "project-docker-gateway": {
+            "command": "docker",
+            "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+          }
+        }
+      },
+      "docker_mcp_yaml": ["context7"],
+      "created": "2024-12-07"
+    },
+    "web-frontend": {
+      "description": "Web development with browser automation",
+      "mcp_json": {
+        "mcpServers": {
+          "project-docker-gateway": {
+            "command": "docker",
+            "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+          },
+          "claude-in-chrome": {
+            "enabled": true
+          }
+        }
+      },
+      "docker_mcp_yaml": ["playwright", "context7"],
+      "created": "2024-12-07"
     },
     "aws-dev": {
       "description": "AWS development with full tooling",
-      "docker_mcps": ["context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore"],
-      "created": "2024-12-07",
-      "last_used": null
-    },
-    "web-frontend": {
-      "description": "Web development with browser automation and docs",
-      "docker_mcps": ["playwright", "context7"],
-      "created": "2024-12-07",
-      "last_used": null
+      "mcp_json": {
+        "mcpServers": {
+          "project-docker-gateway": {
+            "command": "docker",
+            "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+          }
+        }
+      },
+      "docker_mcp_yaml": ["context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore"],
+      "created": "2024-12-07"
     },
     "full-stack": {
       "description": "Full stack development with all common tools",
-      "docker_mcps": ["playwright", "context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore"],
-      "created": "2024-12-07",
-      "last_used": null
-    },
-    "data-engineering": {
-      "description": "Data pipelines and database work",
-      "docker_mcps": ["context7", "aws-api", "aws-documentation"],
-      "created": "2024-12-07",
-      "last_used": null
+      "mcp_json": {
+        "mcpServers": {
+          "project-docker-gateway": {
+            "command": "docker",
+            "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+          },
+          "claude-in-chrome": {
+            "enabled": true
+          }
+        }
+      },
+      "docker_mcp_yaml": ["playwright", "context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore"],
+      "created": "2024-12-07"
     }
   },
   "docker_mcps": {
@@ -44,8 +72,7 @@
         "Extract page content",
         "Handle forms and dialogs"
       ],
-      "tags": ["browser", "automation", "testing", "web"],
-      "added": "2024-12-01"
+      "tags": ["browser", "automation", "testing", "web"]
     },
     "context7": {
       "description": "Documentation lookup - fetch latest library and framework documentation",
@@ -55,8 +82,7 @@
         "Find code examples",
         "Resolve library IDs"
       ],
-      "tags": ["docs", "documentation", "libraries", "api"],
-      "added": "2024-12-01"
+      "tags": ["docs", "documentation", "libraries", "api"]
     },
     "aws-api": {
       "description": "AWS CLI execution - run any AWS CLI command with validation",
@@ -66,8 +92,7 @@
         "Support for all AWS services",
         "Region and profile configuration"
       ],
-      "tags": ["aws", "cli", "cloud", "infrastructure"],
-      "added": "2024-12-01"
+      "tags": ["aws", "cli", "cloud", "infrastructure"]
     },
     "aws-documentation": {
       "description": "AWS documentation search - search and read AWS docs",
@@ -76,8 +101,7 @@
         "Read documentation pages",
         "Get recommendations for related content"
       ],
-      "tags": ["aws", "docs", "documentation"],
-      "added": "2024-12-01"
+      "tags": ["aws", "docs", "documentation"]
     },
     "amazon-bedrock-agentcore": {
       "description": "AgentCore documentation - search Bedrock AgentCore platform docs",
@@ -86,8 +110,7 @@
         "Fetch AgentCore guides",
         "Runtime and Memory documentation"
       ],
-      "tags": ["aws", "bedrock", "agentcore", "ai"],
-      "added": "2024-12-01"
+      "tags": ["aws", "bedrock", "agentcore", "ai"]
     },
     "aws-core-mcp-server": {
       "description": "AWS core tools - additional AWS service integrations",
@@ -95,16 +118,8 @@
         "Extended AWS service support",
         "Core AWS operations"
       ],
-      "tags": ["aws", "core", "cloud"],
-      "added": "2024-12-01"
+      "tags": ["aws", "core", "cloud"]
     }
   },
-  "archived": {},
-  "config": {
-    "default_profile": null,
-    "auto_apply_on_cd": false,
-    "sync_with_docker_catalog": true,
-    "show_token_warnings": true,
-    "token_warning_threshold": 50000
-  }
+  "archived": {}
 }

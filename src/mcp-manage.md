@@ -4,77 +4,138 @@ You are helping the user manage their MCP (Model Context Protocol) servers inter
 
 ## Understanding the MCP Architecture
 
-There are TWO levels of MCP management:
+MCP management is **project-local** - each project has its own isolated configuration.
 
-1. **Claude Code MCPs** (`claude mcp list`) - Top-level MCPs like `MCP_DOCKER`
-2. **Docker Gateway MCPs** (`~/.docker/mcp/registry.yaml`) - Individual servers INSIDE the Docker Gateway
+### Level 1: Claude Code MCPs (Project-Level)
 
-The Docker Gateway (`MCP_DOCKER`) is a container that bundles multiple MCP servers. Users can enable/disable individual servers within the gateway.
+Defined in `.mcp.json` in the project root. This controls which MCPs are available in that project.
 
-## Context Files
+```json
+// .mcp.json
+{
+  "mcpServers": {
+    "project-docker-gateway": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+    },
+    "claude-in-chrome": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### Level 2: Docker Gateway MCPs (Project-Level)
+
+Each project can have its own Docker gateway with its own set of MCPs.
 
 | File | Purpose |
 |------|---------|
-| `~/.docker/mcp/registry.yaml` | **Docker Gateway enabled servers** - Individual MCPs inside the gateway |
-| `~/.config/claude-mcp/registry.json` | MCP Manager's registry - metadata, profiles, archives |
-| `.mcp-project.json` | Project-specific MCP configuration |
+| `.mcp.json` | Defines the project's Docker gateway |
+| `.docker-mcp.yaml` | Lists which MCPs run in this project's gateway |
+
+Example `.docker-mcp.yaml`:
+```yaml
+servers:
+  - playwright
+  - context7
+  - aws-api
+```
+
+### Built-in Claude Code MCPs
+
+Some MCPs are built into Claude Code:
+- **claude-in-chrome** - Browser automation via Chrome extension
+  - Project-level: Add to `.mcp.json` with `"enabled": true/false`
+  - Global fallback: `claudeInChromeDefaultEnabled` in `~/.claude.json`
+
+## Context Files
+
+| File | Scope | Purpose |
+|------|-------|---------|
+| `.mcp.json` | Project | **Primary config** - Claude Code MCPs for this project |
+| `.docker-mcp.yaml` | Project | Docker gateway server list for this project |
+| `~/.config/claude-mcp/registry.json` | Global | MCP Manager's registry - templates, profiles |
+| `~/.claude.json` | Global | Fallback defaults (only if no project config) |
 
 ## Step 1: Gather Current State
 
-Collect information from ALL sources:
+Collect information from project and global sources:
 
-1. **Claude Code level:** Run `claude mcp list` to see top-level MCPs
-2. **Docker Gateway level:** Read `~/.docker/mcp/registry.yaml` to see individual enabled servers
-3. **Available servers:** Use `docker mcp catalog show` or `mcp__MCP_DOCKER__mcp-find` to see what's available
-4. **Registry metadata:** Read `~/.config/claude-mcp/registry.json` for profiles and archives
-5. **Project config:** Check if `.mcp-project.json` exists
+1. **Project MCP config:** Read `.mcp.json` in project root (if exists)
+2. **Project Docker config:** Read `.docker-mcp.yaml` in project root (if exists)
+3. **Active MCPs:** Run `claude mcp list` to see currently loaded MCPs
+4. **Available servers:** Use `docker mcp catalog show` or `mcp__MCP_DOCKER__mcp-find` to discover new MCPs
+5. **Templates/Profiles:** Read `~/.config/claude-mcp/registry.json` for saved templates
+6. **Global defaults:** Read `~/.claude.json` for fallback settings (claudeInChromeDefaultEnabled, etc.)
 
 ## Step 2: Present Status Summary
 
-Show the Docker Gateway servers in a clean, wrapped format:
+Show project context and MCP status:
 
 ```
-MCP Status
+MCP Status - Project: coherentLovingConnection
 ══════════════════════════════════════════════════════════════
 
-Claude Code: MCP_DOCKER (Docker Gateway) ✓ Connected
+Config Files:
+  ✓ .mcp.json              Project MCP configuration
+  ✓ .docker-mcp.yaml       Docker gateway servers
 
-Docker Gateway Servers:
-  ✓ playwright                Browser automation
-  ✓ context7                  Documentation lookup
-  ✓ aws-api                   AWS CLI execution
-  ✓ aws-documentation         AWS docs search
-  ✓ amazon-bedrock-agentcore  AgentCore docs
-  ✓ aws-core-mcp-server       AWS core tools
+Claude Code MCPs:
+  ✓ project-docker-gateway  Docker MCP Gateway
+  ✓ claude-in-chrome        Browser automation (enabled)
+
+Docker Gateway Servers (.docker-mcp.yaml):
+  ✓ playwright              Browser automation
+  ✓ context7                Documentation lookup
+  ✓ aws-api                 AWS CLI execution
 
 ══════════════════════════════════════════════════════════════
 ```
 
-### Displaying Profiles
+If no project config exists, show:
+```
+MCP Status - Project: myproject
+══════════════════════════════════════════════════════════════
 
-Show profiles in a vertical list format for better readability:
+Config Files:
+  ✗ .mcp.json              Not found - using global defaults
+  ✗ .docker-mcp.yaml       Not found
+
+Would you like to initialize project MCP configuration?
+
+══════════════════════════════════════════════════════════════
+```
+
+### Displaying Templates
+
+Show saved templates in a vertical list format for better readability:
 
 ```
-Available Profiles:
-───────────────────
+Available Templates:
+────────────────────
 
 minimal
   Description: Basic documentation lookup only
-  MCPs: context7
+  Docker MCPs: context7
+  Claude MCPs: (none)
 
 aws-dev
   Description: AWS development with full tooling
-  MCPs: context7, aws-api, aws-documentation,
-        amazon-bedrock-agentcore
+  Docker MCPs: context7, aws-api, aws-documentation,
+               amazon-bedrock-agentcore
+  Claude MCPs: (none)
 
 web-frontend
   Description: Web development with browser automation
-  MCPs: playwright, context7
+  Docker MCPs: playwright, context7
+  Claude MCPs: claude-in-chrome
 
 full-stack
   Description: Full stack development with all common tools
-  MCPs: playwright, context7, aws-api, aws-documentation,
-        amazon-bedrock-agentcore
+  Docker MCPs: playwright, context7, aws-api, aws-documentation,
+               amazon-bedrock-agentcore
+  Claude MCPs: claude-in-chrome
 ```
 
 ## Step 3: Offer Options
@@ -82,35 +143,96 @@ full-stack
 Present the main menu using AskUserQuestion:
 
 **Main Actions:**
-1. **Enable/Disable Docker MCPs** - Toggle individual servers in the Docker Gateway
-2. **Discover New MCPs** - Search Docker catalog for new tools
-3. **Manage Profiles** - List, apply, or CREATE new profiles
-4. **Manage Archives** - View and restore archived MCPs
-5. **Save/Load Project Config** - Manage .mcp-project.json
+1. **Initialize Project** - Create `.mcp.json` and `.docker-mcp.yaml` for this project
+2. **Manage Docker MCPs** - Add/remove servers in project's `.docker-mcp.yaml`
+3. **Manage Claude Code MCPs** - Toggle built-in MCPs (claude-in-chrome, etc.) in `.mcp.json`
+4. **Discover New MCPs** - Search Docker catalog for new tools
+5. **Manage Templates** - Save current config as template, apply templates
+6. **Manage Archives** - View and restore archived MCPs
 
-## Feature: Enable/Disable Docker MCPs
+## Feature: Initialize Project
 
-### To ENABLE a server in Docker Gateway:
-```bash
-docker mcp server enable <server-name>
-# Or enable multiple at once:
-docker mcp server enable <name1> <name2> <name3>
+Create project-local MCP configuration files:
+
+### Create `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "project-docker-gateway": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+    },
+    "claude-in-chrome": {
+      "enabled": true
+    }
+  }
+}
 ```
 
-### To DISABLE a server in Docker Gateway:
-```bash
-docker mcp server disable <server-name>
-# Or disable multiple at once:
-docker mcp server disable <name1> <name2> <name3>
+### Create `.docker-mcp.yaml`:
+```yaml
+# Docker MCP Gateway servers for this project
+servers:
+  - context7
+  - playwright
 ```
 
-### To LIST currently enabled servers:
+### After initialization:
+User should restart their Claude Code session to load the new project config.
+
+## Feature: Manage Docker MCPs
+
+Edit the project's `.docker-mcp.yaml` to add/remove servers.
+
+### To ADD a server:
+Add the server name to the `servers` list in `.docker-mcp.yaml`
+
+### To REMOVE a server:
+Remove the server name from the `servers` list in `.docker-mcp.yaml`
+
+### To see available servers:
 ```bash
-docker mcp server ls
+docker mcp catalog show
 ```
+Or use `mcp__MCP_DOCKER__mcp-find` tool with a search query.
 
 ### After changes:
-The Docker Gateway needs to be restarted. User should restart their Claude Code session for changes to take effect.
+User should restart their Claude Code session for changes to take effect.
+
+## Feature: Manage Claude Code MCPs
+
+Toggle built-in Claude Code MCPs in the project's `.mcp.json`.
+
+### claude-in-chrome
+
+To enable for this project:
+```json
+// In .mcp.json mcpServers section:
+"claude-in-chrome": {
+  "enabled": true
+}
+```
+
+To disable for this project:
+```json
+"claude-in-chrome": {
+  "enabled": false
+}
+```
+
+### Other Claude Code MCPs
+
+Any MCP can be added to the project's `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "custom-mcp": {
+      "command": "node",
+      "args": ["/path/to/mcp-server.js"]
+    }
+  }
+}
+```
 
 ## Feature: Discover New MCPs
 
@@ -129,51 +251,52 @@ The Docker Gateway needs to be restarted. User should restart their Claude Code 
 - **AI/ML:** amazon-bedrock-agentcore, anthropic
 - **DevOps:** docker, kubernetes, github
 
-## Feature: Manage Profiles
+## Feature: Manage Templates
 
-When user selects "Manage Profiles", offer these sub-options:
+Templates let you save and reuse MCP configurations across projects.
 
-1. **List Profiles** - Show all available profiles with their MCPs
-2. **Apply Profile** - Switch to a different profile
-3. **Create New Profile** - Save current MCPs as a new profile
+When user selects "Manage Templates", offer these sub-options:
 
-### List Profiles
-Display each profile vertically with wrapped MCP lists (see format above).
+1. **List Templates** - Show all saved templates
+2. **Apply Template** - Apply a template to this project's config files
+3. **Save as Template** - Save current project's config as a new template
 
-### Apply Profile
-1. Show current MCPs vs profile MCPs
-2. Show what will be added/removed
-3. Confirm with user
-4. Run `docker mcp server enable/disable` commands
-5. Inform user to restart session
+### List Templates
+Display each template vertically with their MCPs.
 
-### Create New Profile (IMPORTANT)
+### Apply Template
+1. Show what the template contains
+2. Confirm with user
+3. Write template contents to `.mcp.json` and `.docker-mcp.yaml`
+4. Inform user to restart session
 
-When user wants to create a new profile:
+### Save as Template
 
-1. **Get profile name**: Ask for a short name (lowercase, no spaces, use hyphens)
-   - Example: `my-project`, `data-science`, `frontend-dev`
+When user wants to save current project config as a template:
 
-2. **Get description**: Ask for a brief description of the profile's purpose
+1. **Get template name**: Ask for a short name (lowercase, hyphens)
+   - Example: `web-dev`, `data-science`, `aws-full`
 
-3. **Capture current MCPs**: Read `~/.docker/mcp/registry.yaml` to get the list of currently enabled servers
+2. **Get description**: Ask for a brief description
 
-4. **Save to registry**: Add the new profile to `~/.config/claude-mcp/registry.json`:
+3. **Capture current config**: Read project's `.mcp.json` and `.docker-mcp.yaml`
+
+4. **Save to registry**: Add the new template to `~/.config/claude-mcp/registry.json`:
 
 ```python
 import json
 from datetime import datetime
 
 # Read current registry
-with open('~/.config/claude-mcp/registry.json', 'r') as f:
+with open(os.path.expanduser('~/.config/claude-mcp/registry.json'), 'r') as f:
     registry = json.load(f)
 
-# Add new profile
-registry['profiles']['<profile-name>'] = {
+# Add new template
+registry['templates']['<template-name>'] = {
     "description": "<user-provided-description>",
-    "docker_mcps": ["<list>", "<of>", "<current>", "<mcps>"],
-    "created": datetime.now().strftime('%Y-%m-%d'),
-    "last_used": None
+    "mcp_json": { ... },  # Contents of .mcp.json
+    "docker_mcp_yaml": [ ... ],  # List of servers from .docker-mcp.yaml
+    "created": datetime.now().strftime('%Y-%m-%d')
 }
 
 # Update timestamp
@@ -184,22 +307,20 @@ with open('~/.config/claude-mcp/registry.json', 'w') as f:
     json.dump(registry, f, indent=2)
 ```
 
-5. **Confirm creation**: Show the user the new profile details
+5. **Confirm creation**: Show the user the new template details
 
 Example interaction:
 ```
-User: I want to create a new profile
+User: I want to save this as a template
 
-You: I'll help you create a new profile from your current MCP setup.
+You: I'll save your current project MCP config as a template.
 
-Current enabled MCPs:
-  - playwright
-  - context7
-  - aws-api
-  - postgres
+Current project config:
+  .mcp.json: project-docker-gateway, claude-in-chrome
+  .docker-mcp.yaml: playwright, context7, aws-api, postgres
 
-What would you like to name this profile?
-(Use lowercase with hyphens, e.g., "my-project", "data-work")
+What would you like to name this template?
+(Use lowercase with hyphens, e.g., "web-dev", "data-work")
 
 User: backend-api
 
@@ -207,15 +328,16 @@ You: Great! Now give me a brief description for "backend-api":
 
 User: Backend API development with database and AWS
 
-You: Perfect! I've created the profile:
+You: Perfect! I've created the template:
 
-  Profile: backend-api
+  Template: backend-api
   Description: Backend API development with database and AWS
-  MCPs: playwright, context7, aws-api, postgres
+  Docker MCPs: playwright, context7, aws-api, postgres
+  Claude MCPs: claude-in-chrome (enabled)
   Created: 2024-12-07
 
-The profile has been saved to your registry. You can apply it anytime
-with /mcp-manage > Manage Profiles > Apply Profile.
+The template has been saved. You can apply it to any project
+with /mcp-manage > Manage Templates > Apply Template.
 ```
 
 ## Feature: Manage Archives
@@ -371,69 +493,64 @@ You: Running: docker mcp server enable postgres
 Done! Restart your Claude Code session to use postgres.
 ```
 
-## Feature: Save/Load Project Config
-
-### Save to Project
-1. Read `~/.docker/mcp/registry.yaml` for enabled MCPs
-2. Write `.mcp-project.json`:
-```json
-{
-  "project": "project-name",
-  "description": "Project description",
-  "docker_mcps": ["playwright", "context7", "aws-api"],
-  "notes": "Created YYYY-MM-DD"
-}
-```
-
-### Load from Project
-1. Read `.mcp-project.json`
-2. Compare with `~/.docker/mcp/registry.yaml`
-3. Show diff and offer to apply changes
-
 ## Important Guidelines
 
-1. **Use vertical layouts** - List profiles and MCPs vertically, not in tables
-2. **Wrap long lists** - If MCP list is long, wrap to multiple lines with proper indentation
-3. **Show BOTH levels** - Claude Code MCPs AND Docker Gateway servers
-4. **Be specific about commands** - Show exact `docker mcp server enable/disable` commands
-5. **Explain restart requirements** - Changes need session restart
-6. **Confirm destructive actions** - Before removing servers
+1. **Project-local first** - Always work with `.mcp.json` and `.docker-mcp.yaml` in project root
+2. **Use vertical layouts** - List templates and MCPs vertically, not in tables
+3. **Wrap long lists** - If MCP list is long, wrap to multiple lines with proper indentation
+4. **Show BOTH levels** - Claude Code MCPs (from .mcp.json) AND Docker Gateway servers (from .docker-mcp.yaml)
+5. **Explain restart requirements** - Changes to config files need session restart
+6. **Confirm destructive actions** - Before removing servers or overwriting configs
 
-## Docker MCP Commands Reference
+## Commands Reference
 
+### Claude Code MCP Commands
+| Command | Purpose |
+|---------|---------|
+| `claude mcp list` | List active MCPs in current session |
+| `claude mcp add <name> --scope project` | Add MCP to project's .mcp.json |
+| `claude mcp remove <name>` | Remove MCP from config |
+
+### Docker MCP Commands
 | Command | Purpose |
 |---------|---------|
 | `docker mcp catalog show` | List all 311+ available servers |
-| `docker mcp server enable <name>` | Enable a server in the gateway |
-| `docker mcp server disable <name>` | Disable a server from the gateway |
-| `docker mcp server ls` | List currently enabled servers |
-| `cat ~/.docker/mcp/registry.yaml` | See enabled servers (config file) |
+| `docker mcp server ls` | List servers in global gateway |
 
-## Example: Creating a Profile
+### Project Config Files
+| File | Purpose |
+|------|---------|
+| `.mcp.json` | Project's Claude Code MCPs |
+| `.docker-mcp.yaml` | Project's Docker gateway servers |
+
+## Example: Initializing a New Project
 
 ```
-You: I'll create a new profile from your current setup.
+You: This project doesn't have MCP configuration yet.
+     Would you like me to initialize it?
 
-Your currently enabled MCPs:
-  - playwright
-  - context7
-  - aws-api
-  - aws-documentation
+User: Yes
 
-What would you like to name this profile?
+You: I'll create the project MCP config files.
 
-User: web-api-dev
+What Docker MCPs do you need? (You can search with /mcp-manage later)
+Common choices: playwright, context7, aws-api
 
-You: Description for "web-api-dev"?
+User: playwright and context7
 
-User: Web API development with browser testing
+You: Enable claude-in-chrome for browser automation?
 
-You: Created profile "web-api-dev":
+User: Yes
 
-  web-api-dev
-    Description: Web API development with browser testing
-    MCPs: playwright, context7, aws-api, aws-documentation
-    Created: 2024-12-07
+You: Created project MCP configuration:
 
-Profile saved! Use /mcp-manage to apply it anytime.
+  .mcp.json:
+    - project-docker-gateway (Docker MCP Gateway)
+    - claude-in-chrome (enabled)
+
+  .docker-mcp.yaml:
+    - playwright
+    - context7
+
+Restart your Claude Code session to load the new configuration.
 ```

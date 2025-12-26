@@ -1,33 +1,69 @@
 # MCP Manager
 
-A system for dynamically managing Model Context Protocol (MCP) servers in Claude Code. Provides per-project configurations, profile management, and easy discovery of new MCPs from the Docker catalog.
+A system for dynamically managing Model Context Protocol (MCP) servers in Claude Code. Each project gets its own **isolated MCP configuration** with its own Docker gateway.
 
 ## Problem Solved
 
 Managing MCPs in Claude Code requires manual command-line operations. Users working on multiple projects with different MCP needs must manually reconfigure their setup when switching contexts. MCP Manager solves this by providing:
 
-- **Per-project MCP configurations** (`.mcp-project.json`)
-- **Profile support** for common workflow presets (aws-dev, web-frontend, etc.)
+- **Project-local MCP configurations** (`.mcp.json` + `.docker-mcp.yaml`)
+- **Per-project Docker gateways** - Each project runs its own isolated gateway
+- **Template support** for reusable MCP presets across projects
+- **Claude Code MCP management** (claude-in-chrome, custom MCPs)
 - **Interactive `/mcp-manage` slash command** for Claude Code
 - **Archive management** for soft-deleting unused MCPs
 - **Easy discovery** of 311+ MCP servers from the Docker catalog
 
 ## Architecture
 
-MCP Manager works with **two levels** of MCP configuration:
+MCP management is **project-local** - each project has its own isolated configuration.
 
-1. **Claude Code MCPs** - Top-level MCPs like `MCP_DOCKER` (the Docker Gateway)
-2. **Docker Gateway MCPs** - Individual servers inside the Docker Gateway (playwright, context7, aws-api, etc.)
+### Level 1: Claude Code MCPs (Project-Level)
+
+Defined in `.mcp.json` in the project root:
+
+```json
+{
+  "mcpServers": {
+    "project-docker-gateway": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+    },
+    "claude-in-chrome": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### Level 2: Docker Gateway MCPs (Project-Level)
+
+Defined in `.docker-mcp.yaml` in the project root:
+
+```yaml
+servers:
+  - playwright
+  - context7
+  - aws-api
+```
+
+### Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Claude Code                                                  │
-│   └── MCP_DOCKER (Docker Gateway)                           │
-│         ├── playwright        (browser automation)          │
-│         ├── context7          (docs lookup)                 │
-│         ├── aws-api           (AWS CLI)                     │
-│         ├── aws-documentation (AWS docs)                    │
-│         └── ...more servers                                 │
+│ Project A                         Project B                  │
+│                                                              │
+│   .mcp.json ──┐                   .mcp.json ──┐             │
+│               ▼                               ▼             │
+│   ┌─────────────────┐           ┌─────────────────┐        │
+│   │  Docker Gateway │           │  Docker Gateway │        │
+│   │  (Project A)    │           │  (Project B)    │        │
+│   │                 │           │                 │        │
+│   │  playwright     │           │  aws-api        │        │
+│   │  context7       │           │  aws-docs       │        │
+│   └─────────────────┘           └─────────────────┘        │
+│                                                              │
+│   .docker-mcp.yaml              .docker-mcp.yaml            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -80,12 +116,12 @@ Run the `/mcp-manage` slash command:
 ```
 
 This provides:
-- **Status View** - See enabled Docker MCPs with descriptions
-- **Enable/Disable** - Toggle individual MCP servers
-- **Discovery** - Browse and add MCPs from Docker catalog (311+ servers)
-- **Profiles** - Apply, create, or manage workflow presets
-- **Archives** - View and restore archived MCPs
-- **Save/Load** - Manage project configurations
+- **Initialize Project** - Create `.mcp.json` and `.docker-mcp.yaml` for this project
+- **Manage Docker MCPs** - Add/remove servers in project's `.docker-mcp.yaml`
+- **Manage Claude Code MCPs** - Toggle claude-in-chrome and other MCPs in `.mcp.json`
+- **Discover New MCPs** - Browse and add MCPs from Docker catalog (311+ servers)
+- **Manage Templates** - Save current config as template, apply templates to projects
+- **Manage Archives** - View and restore archived MCPs
 
 #### Session Commands
 
@@ -135,178 +171,175 @@ mcp-search <term>   # Search MCPs by keyword
 
 ## Project Configuration
 
-Create a `.mcp-project.json` in your project root:
+Each project needs two config files in the project root:
+
+### `.mcp.json` - Claude Code MCPs
 
 ```json
 {
-  "schema_version": "2.0",
-  "project": "my-project",
-  "description": "Description of what this project does",
-  "docker_mcps": ["playwright", "context7", "aws-api"],
-  "port": 8811,
-  "notes": "Optional notes about this configuration"
+  "mcpServers": {
+    "project-docker-gateway": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+    },
+    "claude-in-chrome": {
+      "enabled": true
+    }
+  }
 }
 ```
 
-### Fields
+### `.docker-mcp.yaml` - Docker Gateway Servers
+
+```yaml
+# Docker MCP Gateway servers for this project
+servers:
+  - playwright
+  - context7
+  - aws-api
+```
+
+### Configuration Fields
+
+#### `.mcp.json` mcpServers
+
+| Key | Description |
+|-----|-------------|
+| `project-docker-gateway` | Docker gateway config pointing to `.docker-mcp.yaml` |
+| `claude-in-chrome` | Browser automation - set `enabled: true/false` |
+| Custom MCPs | Any additional MCP server definitions |
+
+#### `.docker-mcp.yaml`
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `schema_version` | No | Config schema version (auto-added during migration) |
-| `project` | Yes | Project name identifier |
-| `description` | No | Human-readable project description |
-| `docker_mcps` | Yes | Array of Docker MCP server names to enable |
-| `port` | No | Gateway port for multi-project support (8811-8899) |
-| `notes` | No | Additional notes about the configuration |
+| `servers` | Yes | Array of Docker MCP server names to enable |
 
-### Schema Migration
+### Migration from Old Format
 
-The `/startup` command automatically migrates old config formats:
+If you have an old `.mcp-project.json`, run `/mcp-manage` to migrate to the new format:
 
 | Old Format | New Format |
 |------------|------------|
-| `servers: [...]` | `docker_mcps: [...]` |
-| `mcps: [...]` | `docker_mcps: [...]` |
-| (no version) | `schema_version: "2.0"` |
-
-Migration happens automatically and preserves all other fields.
+| `.mcp-project.json` | `.mcp.json` + `.docker-mcp.yaml` |
+| `docker_mcps: [...]` | `servers:` in `.docker-mcp.yaml` |
 
 ## Multi-Project Support
 
-MCP Manager supports running **multiple projects simultaneously** with different MCP configurations. This is achieved by running dedicated gateway instances on separate ports.
-
-### Architecture
-
-```
-SINGLE GATEWAY (Default - Shared Config):
-┌──────────────────────────────────────────────────────────────────┐
-│ All Claude Code Sessions                                          │
-│                                                                   │
-│   MCP_DOCKER ──────────────────┐                                 │
-│   (stdio transport)            │                                 │
-│                                ▼                                 │
-│                    ┌─────────────────────┐                       │
-│                    │   Docker Gateway    │                       │
-│                    │   (Single Instance) │                       │
-│                    │                     │                       │
-│                    │   ~/.docker/mcp/    │                       │
-│                    │   registry.yaml     │ ◄── Shared config     │
-│                    └─────────────────────┘                       │
-└──────────────────────────────────────────────────────────────────┘
-
-MULTIPLE GATEWAYS (Per-Project Config):
-┌──────────────────────────────────────────────────────────────────┐
-│ Session A (Project A)          Session B (Project B)              │
-│                                                                   │
-│   localhost:8811 ──┐           localhost:8812 ──┐                │
-│   (SSE transport)  │           (SSE transport)  │                │
-│                    ▼                            ▼                │
-│      ┌─────────────────┐           ┌─────────────────┐          │
-│      │  Gateway A      │           │  Gateway B      │          │
-│      │  Port: 8811     │           │  Port: 8812     │          │
-│      │  playwright     │           │  aws-api        │          │
-│      │  context7       │           │  aws-docs       │          │
-│      └─────────────────┘           └─────────────────┘          │
-└──────────────────────────────────────────────────────────────────┘
-```
+With the new project-local architecture, **each project automatically gets its own isolated gateway**. No port configuration needed - Claude Code handles isolation via the project's `.mcp.json`.
 
 ### How It Works
 
-1. **Add `port` to `.mcp-project.json`**: This tells MCP Manager to use a dedicated gateway
-2. **Run `/startup`**: Automatically starts a gateway on the configured port
+1. **Create project config**: Add `.mcp.json` and `.docker-mcp.yaml` to your project
+2. **Start Claude Code session**: The gateway starts automatically from the project config
 3. **Work independently**: Each project has its own isolated MCP tools
-4. **Run `/shutdown`**: Stops the gateway when you're done
+4. **Switch projects**: Each project loads its own config when you start a session there
 
 ### Example Setup
 
 **Project A** (Web development):
+
+`.mcp.json`:
 ```json
 {
-  "project": "webapp",
-  "docker_mcps": ["playwright", "context7"],
-  "port": 8811
+  "mcpServers": {
+    "project-docker-gateway": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+    },
+    "claude-in-chrome": { "enabled": true }
+  }
 }
+```
+
+`.docker-mcp.yaml`:
+```yaml
+servers:
+  - playwright
+  - context7
 ```
 
 **Project B** (AWS infrastructure):
+
+`.mcp.json`:
 ```json
 {
-  "project": "infra",
-  "docker_mcps": ["aws-api", "aws-documentation", "context7"],
-  "port": 8812
+  "mcpServers": {
+    "project-docker-gateway": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+    }
+  }
 }
 ```
 
-### Gateway Commands
-
-The gateway runs via the Docker MCP CLI:
-
-```bash
-# Start a gateway manually (done automatically by /startup)
-docker mcp gateway run \
-  --servers=playwright,context7 \
-  --transport=sse \
-  --port=8811
-
-# Check if gateway is running
-lsof -i :8811 | grep LISTEN
-
-# Stop gateway (done automatically by /shutdown)
-pkill -f "docker mcp gateway.*--port=8811"
+`.docker-mcp.yaml`:
+```yaml
+servers:
+  - aws-api
+  - aws-documentation
+  - context7
 ```
 
 ### Key Points
 
-- **Port Range**: Use ports 8811-8899 for project gateways
-- **Isolation**: Each gateway only has the servers you specify
-- **Catalog Access**: All gateways use the shared Docker MCP catalog (311+ servers)
-- **Session Lifecycle**: `/startup` starts, `/shutdown` stops the gateway
-- **No Port = Shared**: Projects without `port` use the shared MCP_DOCKER gateway
+- **Automatic Isolation**: Each project has its own gateway via `.mcp.json`
+- **No Port Management**: Claude Code handles transport automatically
+- **Catalog Access**: All projects can discover from the Docker MCP catalog (311+ servers)
+- **Session Lifecycle**: Gateway starts/stops with your Claude Code session
 
-## Global Registry (v2.0 Schema)
+## Global Registry
 
-The global registry (`~/.config/claude-mcp/registry.json`) stores MCP metadata, profiles, and archives:
+The global registry (`~/.config/claude-mcp/registry.json`) stores **templates** for reuse across projects, MCP metadata, and archives:
 
 ```json
 {
   "version": "2.0",
   "last_updated": "2024-12-07T20:00:00Z",
-  "profiles": {
+  "templates": {
     "minimal": {
       "description": "Basic documentation lookup only",
-      "docker_mcps": ["context7"],
-      "created": "2024-12-07",
-      "last_used": null
+      "mcp_json": { ... },
+      "docker_mcp_yaml": ["context7"],
+      "created": "2024-12-07"
+    },
+    "web-frontend": {
+      "description": "Web development with browser automation",
+      "mcp_json": { ... },
+      "docker_mcp_yaml": ["playwright", "context7"],
+      "created": "2024-12-07"
     },
     "aws-dev": {
       "description": "AWS development with full tooling",
-      "docker_mcps": ["context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore"],
-      "created": "2024-12-07",
-      "last_used": null
+      "mcp_json": { ... },
+      "docker_mcp_yaml": ["context7", "aws-api", "aws-documentation", "amazon-bedrock-agentcore"],
+      "created": "2024-12-07"
     }
   },
   "docker_mcps": {
     "playwright": {
       "description": "Browser automation - navigate, click, type, take screenshots",
       "capabilities": ["Navigate to URLs", "Click elements", "Type text", "Take screenshots"],
-      "tags": ["browser", "automation", "testing", "web"],
-      "added": "2024-12-01"
+      "tags": ["browser", "automation", "testing", "web"]
     },
     "context7": {
       "description": "Documentation lookup - fetch latest library documentation",
       "capabilities": ["Search library docs", "Get API references", "Find code examples"],
-      "tags": ["docs", "documentation", "libraries", "api"],
-      "added": "2024-12-01"
+      "tags": ["docs", "documentation", "libraries", "api"]
     }
   },
-  "archived": {},
-  "config": {
-    "default_profile": null,
-    "auto_apply_on_cd": false,
-    "sync_with_docker_catalog": true
-  }
+  "archived": {}
 }
 ```
+
+### Template Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `description` | Yes | Template description |
+| `mcp_json` | Yes | Contents for `.mcp.json` |
+| `docker_mcp_yaml` | Yes | Server list for `.docker-mcp.yaml` |
+| `created` | Yes | Date template was created |
 
 ### Docker MCP Fields
 
@@ -315,16 +348,6 @@ The global registry (`~/.config/claude-mcp/registry.json`) stores MCP metadata, 
 | `description` | Yes | Human-readable description |
 | `capabilities` | Yes | Array of specific capabilities |
 | `tags` | Yes | Keywords for searching/filtering |
-| `added` | No | Date MCP was added to registry |
-
-### Profile Fields
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `description` | Yes | Profile description |
-| `docker_mcps` | Yes | Array of MCP server names |
-| `created` | Yes | Date profile was created |
-| `last_used` | No | Date profile was last applied |
 
 ## Available MCPs
 
@@ -339,15 +362,14 @@ The global registry (`~/.config/claude-mcp/registry.json`) stores MCP metadata, 
 | `amazon-bedrock-agentcore` | AgentCore platform documentation |
 | `aws-core-mcp-server` | Additional AWS service integrations |
 
-### Default Profiles
+### Default Templates
 
-| Profile | MCPs | Description |
-|---------|------|-------------|
-| `minimal` | context7 | Just docs lookup |
-| `aws-dev` | context7, aws-api, aws-documentation, amazon-bedrock-agentcore | AWS development |
-| `web-frontend` | playwright, context7 | Web development with browser |
-| `full-stack` | playwright, context7, aws-api, aws-documentation, amazon-bedrock-agentcore | All common tools |
-| `data-engineering` | context7, aws-api, aws-documentation | Data pipelines |
+| Template | Docker MCPs | Claude MCPs | Description |
+|----------|-------------|-------------|-------------|
+| `minimal` | context7 | (none) | Just docs lookup |
+| `web-frontend` | playwright, context7 | claude-in-chrome | Web development with browser |
+| `aws-dev` | context7, aws-api, aws-documentation, amazon-bedrock-agentcore | (none) | AWS development |
+| `full-stack` | playwright, context7, aws-api, aws-documentation, amazon-bedrock-agentcore | claude-in-chrome | All common tools |
 
 ### Discovering More MCPs
 
@@ -384,19 +406,19 @@ Archived MCPs are stored in the `archived` section of the registry and can be re
 ## File Locations
 
 ```
-~/.config/claude-mcp/
-├── registry.json       # Global MCP registry (profiles, metadata, archives)
-└── mcp-helpers.sh      # Shell functions for terminal management
+<project>/                    # Project-local (primary)
+├── .mcp.json                 # Claude Code MCPs for this project
+├── .docker-mcp.yaml          # Docker gateway servers for this project
+└── CLAUDE.md                 # Session instructions
 
-~/.claude/commands/
-└── mcp-manage.md       # /mcp-manage slash command definition
+~/.config/claude-mcp/         # Global (templates & metadata)
+├── registry.json             # Templates, MCP metadata, archives
+└── mcp-helpers.sh            # Shell functions for terminal management
 
-~/.docker/mcp/
-└── registry.yaml       # Docker Gateway enabled servers (managed by Docker)
+~/.claude/commands/           # Slash commands
+└── mcp-manage.md             # /mcp-manage slash command definition
 
-<project>/
-├── .mcp-project.json   # Project-specific MCP configuration
-└── CLAUDE.md           # Session instructions (includes MCP check)
+~/.claude.json                # Global fallback defaults
 ```
 
 ## Development
@@ -407,7 +429,8 @@ Archived MCPs are stored in the `archived` section of the registry and can be re
 mcpManager/
 ├── README.md                 # This file
 ├── CLAUDE.md                 # Claude Code session instructions
-├── .mcp-project.json         # MCP config for this project
+├── .mcp.json                 # Claude Code MCPs for this project
+├── .docker-mcp.yaml          # Docker gateway servers for this project
 ├── docs/
 │   ├── PRD.md               # Product Requirements Document
 │   └── testing_strategy.md  # Testing documentation
@@ -437,25 +460,25 @@ mcpManager/
 
 ### Test Coverage
 
-The test suite includes 35 auto-numbered tests:
+The test suite validates the new project-local architecture:
 
-**Unit Tests (17 tests)**
-- JSON validity and schema compliance
+**Unit Tests**
+- JSON/YAML validity and schema compliance
 - Required fields validation
-- Profile reference validation
+- Template reference validation
 - Script syntax checks
 - Slash command validation (mcp-manage.md, startup.md, shutdown.md, project-update.md)
 
-**Integration Tests (12 tests)**
+**Integration Tests**
 - Registry operations (read/write/modify)
 - Archive and restore workflows
-- Profile creation and deletion
-- Project config handling
-- Schema migration (servers/mcps → docker_mcps)
+- Template creation and application
+- Project config handling (.mcp.json + .docker-mcp.yaml)
+- Migration from old format (.mcp-project.json → .mcp.json + .docker-mcp.yaml)
 
-**Validation Tests (6 tests)**
+**Validation Tests**
 - Field type validation
-- Config section validation
+- Template section validation
 - Archive section validation
 - mcp-manage.md feature validation
 
@@ -486,7 +509,10 @@ cp ~/.config/claude-mcp/registry.json ~/.config/claude-mcp/registry.json.bak
 ```
 
 ### Changes not taking effect
-After enabling/disabling Docker MCPs, restart your Claude Code session for changes to take effect.
+After modifying `.mcp.json` or `.docker-mcp.yaml`, restart your Claude Code session for changes to take effect.
+
+### Missing project config
+If `.mcp.json` or `.docker-mcp.yaml` don't exist, run `/mcp-manage` and select "Initialize Project" to create them.
 
 ## License
 

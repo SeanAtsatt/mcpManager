@@ -1,0 +1,4 @@
+# Docker MCP Gateway servers for mcpManager project
+servers:
+  - playwright
+  - context7

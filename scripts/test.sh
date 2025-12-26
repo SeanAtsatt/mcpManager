@@ -76,7 +76,7 @@ test_start "Registry has required top-level keys (v2.0 schema)"
 MISSING=$(python3 -c "
 import json
 reg = json.load(open('$SRC_DIR/registry.json'))
-required = ['version', 'profiles', 'docker_mcps', 'archived', 'config']
+required = ['version', 'templates', 'docker_mcps', 'archived']
 missing = [k for k in required if k not in reg]
 print(' '.join(missing))
 " 2>/dev/null)
@@ -119,15 +119,15 @@ else
     test_fail "Missing fields: $RESULT"
 fi
 
-# Profile docker_mcps reference valid MCPs
-test_start "Profile docker_mcps reference valid MCPs"
+# Template docker_mcp_yaml reference valid MCPs
+test_start "Template docker_mcp_yaml reference valid MCPs"
 RESULT=$(python3 << 'PYTHON'
 import json
 reg = json.load(open('src/registry.json'))
 errors = []
 known_mcps = set(reg.get('docker_mcps', {}).keys())
-for name, profile in reg.get('profiles', {}).items():
-    for mcp in profile.get('docker_mcps', []):
+for name, template in reg.get('templates', {}).items():
+    for mcp in template.get('docker_mcp_yaml', []):
         if mcp not in known_mcps:
             errors.append(f"{name}->{mcp}")
 print(' '.join(errors) if errors else '')
@@ -139,16 +139,16 @@ else
     test_fail "Invalid references: $RESULT"
 fi
 
-# All profiles have required fields
-test_start "All profiles have required fields"
+# All templates have required fields
+test_start "All templates have required fields"
 RESULT=$(python3 << 'PYTHON'
 import json
 reg = json.load(open('src/registry.json'))
-required = ['description', 'docker_mcps', 'created']
+required = ['description', 'docker_mcp_yaml', 'created']
 errors = []
-for name, profile in reg.get('profiles', {}).items():
+for name, template in reg.get('templates', {}).items():
     for key in required:
-        if key not in profile:
+        if key not in template:
             errors.append(f"{name}.{key}")
 print(' '.join(errors) if errors else '')
 PYTHON
@@ -203,7 +203,7 @@ fi
 test_start "startup.md contains required sections"
 MISSING_SECTIONS=$(python3 << 'PYTHON'
 content = open('src/startup.md').read()
-required = ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'Step 6', 'Step 7', 'Step 8', 'MCP Status', 'Rules of Engagement', 'Gateway', 'Project Issues']
+required = ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'Step 6', 'Step 7', 'MCP Configuration', 'Rules of Engagement', '.mcp.json', '.docker-mcp.yaml', 'Project Issues']
 missing = [s for s in required if s not in content]
 print(' '.join(missing) if missing else '')
 PYTHON
@@ -226,7 +226,7 @@ fi
 test_start "shutdown.md contains required sections"
 MISSING_SECTIONS=$(python3 << 'PYTHON'
 content = open('src/shutdown.md').read()
-required = ['Step 1', 'Step 2', 'Gateway', 'port']
+required = ['Step 1', 'Step 2', 'Step 3', 'Gateway', 'commit']
 missing = [s for s in required if s not in content]
 print(' '.join(missing) if missing else '')
 PYTHON
@@ -237,13 +237,13 @@ else
     test_fail "Missing sections: $MISSING_SECTIONS"
 fi
 
-# startup.md includes gateway management
-test_start "startup.md includes gateway management"
-if grep -q "docker mcp gateway run" "$SRC_DIR/startup.md" 2>/dev/null && \
-   grep -q "Multi-Project Support" "$SRC_DIR/startup.md" 2>/dev/null; then
+# startup.md references project-local config
+test_start "startup.md references project-local config"
+if grep -q ".mcp.json" "$SRC_DIR/startup.md" 2>/dev/null && \
+   grep -q ".docker-mcp.yaml" "$SRC_DIR/startup.md" 2>/dev/null; then
     test_pass
 else
-    test_fail "Gateway management not found in startup.md"
+    test_fail "Project-local config references not found in startup.md"
 fi
 
 # project-update.md exists and is not empty
@@ -258,7 +258,7 @@ fi
 test_start "project-update.md contains required sections"
 MISSING_SECTIONS=$(python3 << 'PYTHON'
 content = open('src/project-update.md').read()
-required = ['MCP Config Migration', 'Permissions Cleanup', 'servers', 'docker_mcps', 'schema_version', 'settings.local.json']
+required = ['Config Migration', 'Permissions Cleanup', '.mcp-project.json', '.mcp.json', '.docker-mcp.yaml', 'settings.local.json']
 missing = [s for s in required if s not in content]
 print(' '.join(missing) if missing else '')
 PYTHON
@@ -309,31 +309,41 @@ else
     test_fail "$RESULT"
 fi
 
-# Project config can be created (v2.0 schema)
-test_start "Project config can be created (v2.0 schema)"
+# Project config can be created (new format)
+test_start "Project config can be created (.mcp.json + .docker-mcp.yaml)"
 TEST_PROJECT_DIR="$TEST_TMP/test-project"
 mkdir -p "$TEST_PROJECT_DIR"
-cat > "$TEST_PROJECT_DIR/.mcp-project.json" << 'EOF'
+cat > "$TEST_PROJECT_DIR/.mcp.json" << 'EOF'
 {
-  "project": "test-project",
-  "description": "Test project",
-  "docker_mcps": ["playwright", "context7"],
-  "port": 8811,
-  "notes": "Test notes"
+  "mcpServers": {
+    "project-docker-gateway": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+    },
+    "claude-in-chrome": {
+      "enabled": true
+    }
+  }
 }
 EOF
-if python3 -c "import json; json.load(open('$TEST_PROJECT_DIR/.mcp-project.json'))" 2>/dev/null; then
+cat > "$TEST_PROJECT_DIR/.docker-mcp.yaml" << 'EOF'
+servers:
+  - playwright
+  - context7
+EOF
+if python3 -c "import json; json.load(open('$TEST_PROJECT_DIR/.mcp.json'))" 2>/dev/null; then
     test_pass
 else
     test_fail "Invalid project config"
 fi
 
-# Project config fields can be parsed
-test_start "Project config fields can be parsed"
+# .mcp.json fields can be parsed
+test_start ".mcp.json fields can be parsed"
 RESULT=$(python3 << PYTHON
 import json
-config = json.load(open('$TEST_PROJECT_DIR/.mcp-project.json'))
-if config.get('project') == 'test-project' and 'playwright' in config.get('docker_mcps', []):
+config = json.load(open('$TEST_PROJECT_DIR/.mcp.json'))
+servers = config.get('mcpServers', {})
+if 'project-docker-gateway' in servers and 'claude-in-chrome' in servers:
     print('OK')
 else:
     print('FAIL')
@@ -342,16 +352,17 @@ PYTHON
 if [ "$RESULT" = "OK" ]; then
     test_pass
 else
-    test_fail "Could not parse config fields"
+    test_fail "Could not parse .mcp.json fields"
 fi
 
-# Project config port field can be parsed
-test_start "Project config port field can be parsed"
+# .docker-mcp.yaml can be parsed
+test_start ".docker-mcp.yaml can be parsed"
 RESULT=$(python3 << PYTHON
-import json
-config = json.load(open('$TEST_PROJECT_DIR/.mcp-project.json'))
-port = config.get('port')
-if port == 8811 and isinstance(port, int):
+import yaml
+with open('$TEST_PROJECT_DIR/.docker-mcp.yaml') as f:
+    config = yaml.safe_load(f)
+servers = config.get('servers', [])
+if 'playwright' in servers and 'context7' in servers:
     print('OK')
 else:
     print('FAIL')
@@ -360,38 +371,60 @@ PYTHON
 if [ "$RESULT" = "OK" ]; then
     test_pass
 else
-    test_fail "Could not parse port field"
+    test_fail "Could not parse .docker-mcp.yaml"
 fi
 
-# Schema migration - servers to docker_mcps
-test_start "Schema migration: servers -> docker_mcps"
+# Migration from old .mcp-project.json to new format
+test_start "Migration: .mcp-project.json -> .mcp.json + .docker-mcp.yaml"
 OLD_CONFIG_DIR="$TEST_TMP/old-config-test"
 mkdir -p "$OLD_CONFIG_DIR"
 cat > "$OLD_CONFIG_DIR/.mcp-project.json" << 'EOF'
 {
   "project": "old-project",
-  "servers": ["playwright", "context7"]
+  "docker_mcps": ["playwright", "context7"]
 }
 EOF
 RESULT=$(python3 << PYTHON
 import json
+import yaml
 
-config_path = '$OLD_CONFIG_DIR/.mcp-project.json'
-config = json.load(open(config_path))
+old_config_path = '$OLD_CONFIG_DIR/.mcp-project.json'
+old_config = json.load(open(old_config_path))
 
-# Apply migration
-if 'servers' in config and 'docker_mcps' not in config:
-    config['docker_mcps'] = config.pop('servers')
+# Extract servers (handle different old field names)
+servers = old_config.get('docker_mcps',
+          old_config.get('servers',
+          old_config.get('mcps', ['context7'])))
 
-if 'schema_version' not in config:
-    config['schema_version'] = '2.0'
+# Create .mcp.json
+mcp_json = {
+    "mcpServers": {
+        "project-docker-gateway": {
+            "command": "docker",
+            "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+        },
+        "claude-in-chrome": {
+            "enabled": True
+        }
+    }
+}
+with open('$OLD_CONFIG_DIR/.mcp.json', 'w') as f:
+    json.dump(mcp_json, f, indent=2)
 
-json.dump(config, open(config_path, 'w'), indent=2)
+# Create .docker-mcp.yaml
+docker_yaml = {"servers": servers}
+with open('$OLD_CONFIG_DIR/.docker-mcp.yaml', 'w') as f:
+    yaml.dump(docker_yaml, f, default_flow_style=False)
 
 # Verify
-config2 = json.load(open(config_path))
-if 'docker_mcps' in config2 and 'servers' not in config2 and config2.get('schema_version') == '2.0':
-    print('OK')
+import os
+if os.path.exists('$OLD_CONFIG_DIR/.mcp.json') and os.path.exists('$OLD_CONFIG_DIR/.docker-mcp.yaml'):
+    with open('$OLD_CONFIG_DIR/.docker-mcp.yaml') as f:
+        new_config = yaml.safe_load(f)
+    if 'playwright' in new_config.get('servers', []):
+        print('OK')
+    else:
+        print('FAIL')
 else:
     print('FAIL')
 PYTHON
@@ -402,32 +435,28 @@ else
     test_fail "Migration failed"
 fi
 
-# Schema migration - mcps to docker_mcps
-test_start "Schema migration: mcps -> docker_mcps"
+# Migration handles old 'servers' field
+test_start "Migration handles old 'servers' field"
 cat > "$OLD_CONFIG_DIR/.mcp-project.json" << 'EOF'
 {
   "project": "old-project-2",
-  "mcps": ["aws-api", "context7"]
+  "servers": ["aws-api", "context7"]
 }
 EOF
 RESULT=$(python3 << PYTHON
 import json
+import yaml
 
-config_path = '$OLD_CONFIG_DIR/.mcp-project.json'
-config = json.load(open(config_path))
+old_config = json.load(open('$OLD_CONFIG_DIR/.mcp-project.json'))
+servers = old_config.get('servers', [])
 
-# Apply migration
-if 'mcps' in config and 'docker_mcps' not in config:
-    config['docker_mcps'] = config.pop('mcps')
+docker_yaml = {"servers": servers}
+with open('$OLD_CONFIG_DIR/.docker-mcp.yaml', 'w') as f:
+    yaml.dump(docker_yaml, f, default_flow_style=False)
 
-if 'schema_version' not in config:
-    config['schema_version'] = '2.0'
-
-json.dump(config, open(config_path, 'w'), indent=2)
-
-# Verify
-config2 = json.load(open(config_path))
-if 'docker_mcps' in config2 and 'mcps' not in config2 and config2.get('schema_version') == '2.0':
+with open('$OLD_CONFIG_DIR/.docker-mcp.yaml') as f:
+    new_config = yaml.safe_load(f)
+if 'aws-api' in new_config.get('servers', []):
     print('OK')
 else:
     print('FAIL')
@@ -436,52 +465,40 @@ PYTHON
 if [ "$RESULT" = "OK" ]; then
     test_pass
 else
-    test_fail "Migration failed"
+    test_fail "Migration failed for 'servers' field"
 fi
 
-# Schema migration preserves other fields
-test_start "Schema migration preserves other fields"
+# Migration handles old 'mcps' field
+test_start "Migration handles old 'mcps' field"
 cat > "$OLD_CONFIG_DIR/.mcp-project.json" << 'EOF'
 {
-  "project": "preserve-test",
-  "description": "Test description",
-  "servers": ["playwright"],
-  "port": 8815,
-  "notes": "Test notes"
+  "project": "old-project-3",
+  "mcps": ["playwright"]
 }
 EOF
 RESULT=$(python3 << PYTHON
 import json
+import yaml
 
-config_path = '$OLD_CONFIG_DIR/.mcp-project.json'
-config = json.load(open(config_path))
+old_config = json.load(open('$OLD_CONFIG_DIR/.mcp-project.json'))
+servers = old_config.get('mcps', [])
 
-# Apply migration
-if 'servers' in config and 'docker_mcps' not in config:
-    config['docker_mcps'] = config.pop('servers')
+docker_yaml = {"servers": servers}
+with open('$OLD_CONFIG_DIR/.docker-mcp.yaml', 'w') as f:
+    yaml.dump(docker_yaml, f, default_flow_style=False)
 
-if 'schema_version' not in config:
-    config['schema_version'] = '2.0'
-
-json.dump(config, open(config_path, 'w'), indent=2)
-
-# Verify all fields preserved
-config2 = json.load(open(config_path))
-checks = [
-    config2.get('project') == 'preserve-test',
-    config2.get('description') == 'Test description',
-    config2.get('port') == 8815,
-    config2.get('notes') == 'Test notes',
-    'docker_mcps' in config2,
-    'servers' not in config2
-]
-print('OK' if all(checks) else 'FAIL')
+with open('$OLD_CONFIG_DIR/.docker-mcp.yaml') as f:
+    new_config = yaml.safe_load(f)
+if 'playwright' in new_config.get('servers', []):
+    print('OK')
+else:
+    print('FAIL')
 PYTHON
 )
 if [ "$RESULT" = "OK" ]; then
     test_pass
 else
-    test_fail "Fields not preserved"
+    test_fail "Migration failed for 'mcps' field"
 fi
 
 # Archive operation works
@@ -554,8 +571,8 @@ else
     test_fail "Restore operation failed"
 fi
 
-# Profile creation works
-test_start "Profile creation works"
+# Template creation works
+test_start "Template creation works"
 RESULT=$(python3 << PYTHON
 import json
 from datetime import datetime
@@ -563,18 +580,27 @@ from datetime import datetime
 reg_path = "$TEST_CONFIG_DIR/registry.json"
 reg = json.load(open(reg_path))
 
-reg['profiles']['test-profile'] = {
-    'description': 'Test profile',
-    'docker_mcps': ['playwright', 'context7'],
-    'created': datetime.now().strftime('%Y-%m-%d'),
-    'last_used': None
+# Ensure templates section exists
+if 'templates' not in reg:
+    reg['templates'] = {}
+
+reg['templates']['test-template'] = {
+    'description': 'Test template',
+    'mcp_json': {
+        'mcpServers': {
+            'project-docker-gateway': {},
+            'claude-in-chrome': {'enabled': True}
+        }
+    },
+    'docker_mcp_yaml': ['playwright', 'context7'],
+    'created': datetime.now().strftime('%Y-%m-%d')
 }
 
 json.dump(reg, open(reg_path, 'w'), indent=2)
 
 # Verify
 reg2 = json.load(open(reg_path))
-if 'test-profile' in reg2.get('profiles', {}):
+if 'test-template' in reg2.get('templates', {}):
     print('OK')
 else:
     print('FAIL')
@@ -583,24 +609,24 @@ PYTHON
 if [ "$RESULT" = "OK" ]; then
     test_pass
 else
-    test_fail "Profile creation failed"
+    test_fail "Template creation failed"
 fi
 
-# Profile deletion works
-test_start "Profile deletion works"
+# Template deletion works
+test_start "Template deletion works"
 RESULT=$(python3 << PYTHON
 import json
 
 reg_path = "$TEST_CONFIG_DIR/registry.json"
 reg = json.load(open(reg_path))
 
-if 'test-profile' in reg['profiles']:
-    del reg['profiles']['test-profile']
+if 'test-template' in reg.get('templates', {}):
+    del reg['templates']['test-template']
     json.dump(reg, open(reg_path, 'w'), indent=2)
 
 # Verify
 reg2 = json.load(open(reg_path))
-if 'test-profile' not in reg2.get('profiles', {}):
+if 'test-template' not in reg2.get('templates', {}):
     print('OK')
 else:
     print('FAIL')
@@ -609,7 +635,7 @@ PYTHON
 if [ "$RESULT" = "OK" ]; then
     test_pass
 else
-    test_fail "Profile deletion failed"
+    test_fail "Template deletion failed"
 fi
 
 echo ""
@@ -659,21 +685,17 @@ else
     test_fail "Invalid capabilities for: $RESULT"
 fi
 
-# Config section has expected keys
-test_start "Config section has expected keys"
-RESULT=$(python3 << 'PYTHON'
+# Templates section exists
+test_start "Templates section exists"
+RESULT=$(python3 -c "
 import json
-reg = json.load(open('src/registry.json'))
-config = reg.get('config', {})
-expected = ['default_profile', 'auto_apply_on_cd', 'sync_with_docker_catalog']
-missing = [k for k in expected if k not in config]
-print(' '.join(missing) if missing else '')
-PYTHON
-)
-if [ -z "$RESULT" ]; then
+reg = json.load(open('$SRC_DIR/registry.json'))
+print('OK' if 'templates' in reg and isinstance(reg['templates'], dict) else 'FAIL')
+" 2>/dev/null)
+if [ "$RESULT" = "OK" ]; then
     test_pass
 else
-    test_fail "Missing config keys: $RESULT"
+    test_fail "Templates section missing or invalid"
 fi
 
 # Archived section exists (even if empty)
@@ -697,13 +719,13 @@ else
     test_fail "Archive management not found in mcp-manage.md"
 fi
 
-# mcp-manage.md uses correct docker mcp commands
-test_start "mcp-manage.md uses correct docker mcp server commands"
-if grep -q "docker mcp server enable" "$SRC_DIR/mcp-manage.md" 2>/dev/null && \
-   grep -q "docker mcp server disable" "$SRC_DIR/mcp-manage.md" 2>/dev/null; then
+# mcp-manage.md references project-local config
+test_start "mcp-manage.md references project-local config files"
+if grep -q ".mcp.json" "$SRC_DIR/mcp-manage.md" 2>/dev/null && \
+   grep -q ".docker-mcp.yaml" "$SRC_DIR/mcp-manage.md" 2>/dev/null; then
     test_pass
 else
-    test_fail "Incorrect docker mcp commands in mcp-manage.md"
+    test_fail "Project-local config references not found in mcp-manage.md"
 fi
 
 echo ""

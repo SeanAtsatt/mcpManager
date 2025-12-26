@@ -21,23 +21,24 @@ Scan for project configuration issues that need attention. Do NOT auto-fix - jus
 ### Issues to Detect
 
 ```python
-import json
 import os
+import json
 
 issues = []
 
-# Check 1: MCP config uses old schema
+# Check 1: Old .mcp-project.json exists (needs migration)
 if os.path.exists('.mcp-project.json'):
-    with open('.mcp-project.json') as f:
-        config = json.load(f)
-    if 'servers' in config and 'docker_mcps' not in config:
-        issues.append("MCP config uses old 'servers' field")
-    if 'mcps' in config and 'docker_mcps' not in config:
-        issues.append("MCP config uses old 'mcps' field")
-    if 'schema_version' not in config:
-        issues.append("MCP config missing schema_version")
+    issues.append("Old .mcp-project.json found (needs migration to .mcp.json + .docker-mcp.yaml)")
 
-# Check 2: Redundant local permissions file
+# Check 2: Missing .mcp.json (project not initialized)
+if not os.path.exists('.mcp.json'):
+    issues.append("Missing .mcp.json - project MCP config not initialized")
+
+# Check 3: Missing .docker-mcp.yaml
+if os.path.exists('.mcp.json') and not os.path.exists('.docker-mcp.yaml'):
+    issues.append("Missing .docker-mcp.yaml - Docker gateway config not found")
+
+# Check 4: Redundant local permissions file
 if os.path.exists('.claude/settings.local.json'):
     issues.append("Redundant .claude/settings.local.json file")
 
@@ -46,54 +47,24 @@ print(issues)
 
 ### Store Issues for Summary
 
-Keep track of detected issues to include in the final summary report. If issues are found, the summary will recommend running `/project-update`.
+Keep track of detected issues to include in the final summary report. If issues are found, the summary will recommend running `/project-update` or `/mcp-manage`.
 
 ## Step 4: Check MCP Configuration
 
-If `.mcp-project.json` exists in the project root:
+Check project MCP configuration:
 
-1. Read `.mcp-project.json` to see required MCPs
-2. Run `docker mcp server ls` to see currently enabled MCPs
-3. Compare the two lists
-4. If there's a mismatch, report it and offer to sync using `/mcp-manage`
+### If `.mcp.json` exists:
 
-## Step 5: Manage Project Gateway (Multi-Project Support)
+1. Read `.mcp.json` to see configured Claude Code MCPs
+2. Read `.docker-mcp.yaml` to see configured Docker gateway servers
+3. Run `claude mcp list` to see currently active MCPs
+4. Compare and report any issues
 
-If `.mcp-project.json` has a `port` field, this project uses a **dedicated gateway** for isolated MCP configuration. This allows multiple projects to run different MCP servers simultaneously.
+### If `.mcp.json` does NOT exist:
 
-### Check Gateway Status
+Report that project needs initialization via `/mcp-manage > Initialize Project`.
 
-1. Read the `port` value from `.mcp-project.json`
-2. Check if a gateway is already running on that port:
-   ```bash
-   lsof -i :<port> | grep LISTEN
-   ```
-
-### Start Gateway if Not Running
-
-If no gateway is running on the configured port:
-
-1. Get the server list from `docker_mcps` in `.mcp-project.json`
-2. Start the gateway in background:
-   ```bash
-   docker mcp gateway run \
-     --servers=<comma-separated-mcps> \
-     --transport=sse \
-     --port=<port> &
-   ```
-3. Wait a moment for startup, then verify it's running
-
-### Gateway Already Running
-
-If a gateway is already running on the port, report its status.
-
-### No Port Configured
-
-If `.mcp-project.json` exists but has no `port` field:
-- Use the shared MCP_DOCKER gateway (current behavior)
-- Sync MCPs via `docker mcp server enable/disable`
-
-## Step 6: Extract Rules of Engagement
+## Step 5: Extract Rules of Engagement
 
 If `CLAUDE.md` exists, extract and summarize the key rules:
 
@@ -101,7 +72,7 @@ If `CLAUDE.md` exists, extract and summarize the key rules:
 2. Identify any scripts that should be used for building, testing, or running
 3. Note any special instructions (e.g., "use Context7 for docs", "always run tests")
 
-## Step 7: Report Summary
+## Step 6: Report Summary
 
 Present a brief summary:
 
@@ -112,16 +83,23 @@ Session Initialized
 Project: <project name from README or directory>
 Recent commits: <last 3 commit summaries>
 
-MCP Status: <matched/mismatched>
-  Required: <list from .mcp-project.json>
-  Enabled:  <list from docker mcp server ls>
+MCP Configuration:
+  .mcp.json:        <exists/missing>
+  .docker-mcp.yaml: <exists/missing>
 
-Gateway: <status - see below>
+  Claude Code MCPs:
+    - project-docker-gateway
+    - claude-in-chrome (enabled/disabled)
+
+  Docker Gateway Servers:
+    - playwright
+    - context7
+    - ...
 
 Project Issues: <none OR list issues>
   • <issue 1>
   • <issue 2>
-  → Run /project-update to fix
+  → Run /mcp-manage or /project-update to fix
 
 Rules of Engagement:
   • <rule 1 from CLAUDE.md>
@@ -145,33 +123,27 @@ Project Issues: None
 If issues detected:
 ```
 Project Issues: 2 found
-  • MCP config uses old 'servers' field
-  • Redundant .claude/settings.local.json file
-  → Run /project-update to fix
+  • Missing .mcp.json - project MCP config not initialized
+  • Old .mcp-project.json found (needs migration)
+  → Run /mcp-manage to initialize or /project-update to migrate
 ```
 
-### Gateway Status Formats
+### MCP Status Formats
 
-If project has a `port` configured:
+If project has `.mcp.json` and `.docker-mcp.yaml`:
 ```
-Gateway: Running on port 8811 (dedicated)
-  Servers: playwright, context7
-  Endpoint: http://localhost:8811/sse
-```
-
-If gateway was just started:
-```
-Gateway: Started on port 8811 (dedicated)
-  Servers: playwright, context7
-  Endpoint: http://localhost:8811/sse
+MCP Configuration: ✓ Configured
+  Claude Code MCPs: project-docker-gateway, claude-in-chrome
+  Docker Servers: playwright, context7
 ```
 
-If no port configured (using shared gateway):
+If project is missing config:
 ```
-Gateway: Using shared MCP_DOCKER
+MCP Configuration: ✗ Not initialized
+  → Run /mcp-manage > Initialize Project
 ```
 
-## Step 8: Offer Codebase Exploration
+## Step 7: Offer Codebase Exploration
 
 After presenting the summary, ask the user:
 
@@ -199,11 +171,9 @@ Proceed immediately with whatever task the user wants.
 
 ## Important
 
-- Complete Steps 1-7 before responding to ANY other user input
-- Step 8 (exploration offer) comes AFTER the summary
+- Complete Steps 1-6 before responding to ANY other user input
+- Step 7 (exploration offer) comes AFTER the summary
 - If files don't exist, skip that step silently
 - Keep the summary concise
-- If MCP mismatch detected, always mention it
-- If gateway fails to start, report the error and suggest checking Docker status
-- If project issues detected, always show them and recommend `/project-update`
-- Do NOT auto-fix issues - detection only, let `/project-update` handle fixes
+- If project issues detected, always show them and recommend `/mcp-manage` or `/project-update`
+- Do NOT auto-fix issues - detection only, let the appropriate command handle fixes
