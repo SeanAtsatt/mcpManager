@@ -18,9 +18,9 @@ Managing MCPs in Claude Code requires manual command-line operations. Users work
 
 MCP management is **project-local** - each project has its own isolated configuration.
 
-### Level 1: Claude Code MCPs (Project-Level)
+### Level 1: User-Configured MCPs (Project-Level)
 
-Defined in `.mcp.json` in the project root:
+Defined in `.mcp.json` in the project root (for user-configured MCP servers only):
 
 ```json
 {
@@ -28,13 +28,22 @@ Defined in `.mcp.json` in the project root:
     "project-docker-gateway": {
       "command": "docker",
       "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
-    },
-    "claude-in-chrome": {
-      "enabled": true
     }
   }
 }
 ```
+
+### Built-in MCPs (Project-Level)
+
+Built-in MCPs like `claude-in-chrome` are configured via `.claude/settings.json`:
+
+```json
+{
+  "enabledMcpServers": ["claude-in-chrome"]
+}
+```
+
+**IMPORTANT:** Built-in MCPs use `.claude/settings.json`, NOT `.mcp.json`. The `.mcp.json` file only supports the standard MCP schema (`command`/`args`).
 
 ### Level 2: Docker Gateway MCPs (Project-Level)
 
@@ -116,9 +125,9 @@ Run the `/mcp-manage` slash command:
 ```
 
 This provides:
-- **Initialize Project** - Create `.mcp.json` and `.docker-mcp.yaml` for this project
+- **Initialize Project** - Create `.mcp.json`, `.claude/settings.json`, and `.docker-mcp.yaml` for this project
 - **Manage Docker MCPs** - Add/remove servers in project's `.docker-mcp.yaml`
-- **Manage Claude Code MCPs** - Toggle claude-in-chrome and other MCPs in `.mcp.json`
+- **Manage Built-in MCPs** - Toggle claude-in-chrome and other built-in MCPs in `.claude/settings.json`
 - **Discover New MCPs** - Browse and add MCPs from Docker catalog (311+ servers)
 - **Manage Templates** - Save current config as template, apply templates to projects
 - **Manage Archives** - View and restore archived MCPs
@@ -171,9 +180,11 @@ mcp-search <term>   # Search MCPs by keyword
 
 ## Project Configuration
 
-Each project needs two config files in the project root:
+Each project needs these config files in the project root:
 
-### `.mcp.json` - Claude Code MCPs
+### `.mcp.json` - User-Configured MCPs
+
+For user-configured MCP servers only (command/args format):
 
 ```json
 {
@@ -181,11 +192,25 @@ Each project needs two config files in the project root:
     "project-docker-gateway": {
       "command": "docker",
       "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
-    },
-    "claude-in-chrome": {
-      "enabled": true
     }
   }
+}
+```
+
+### `.claude/settings.json` - Built-in MCPs
+
+For built-in MCPs like claude-in-chrome:
+
+```json
+{
+  "enabledMcpServers": ["claude-in-chrome"]
+}
+```
+
+To disable a built-in MCP:
+```json
+{
+  "disabledMcpServers": ["claude-in-chrome"]
 }
 ```
 
@@ -206,8 +231,16 @@ servers:
 | Key | Description |
 |-----|-------------|
 | `project-docker-gateway` | Docker gateway config pointing to `.docker-mcp.yaml` |
-| `claude-in-chrome` | Browser automation - set `enabled: true/false` |
-| Custom MCPs | Any additional MCP server definitions |
+| Custom MCPs | Any additional MCP server definitions (command/args format) |
+
+**Note:** Do NOT add `"enabled": true/false` entries to `.mcp.json` - this causes schema validation errors.
+
+#### `.claude/settings.json`
+
+| Key | Description |
+|-----|-------------|
+| `enabledMcpServers` | Array of built-in MCPs to enable for this project |
+| `disabledMcpServers` | Array of built-in MCPs to disable for this project |
 
 #### `.docker-mcp.yaml`
 
@@ -230,36 +263,14 @@ With the new project-local architecture, **each project automatically gets its o
 
 ### How It Works
 
-1. **Create project config**: Add `.mcp.json` and `.docker-mcp.yaml` to your project
+1. **Create project config**: Add `.mcp.json`, `.claude/settings.json`, and `.docker-mcp.yaml` to your project
 2. **Start Claude Code session**: The gateway starts automatically from the project config
 3. **Work independently**: Each project has its own isolated MCP tools
 4. **Switch projects**: Each project loads its own config when you start a session there
 
 ### Example Setup
 
-**Project A** (Web development):
-
-`.mcp.json`:
-```json
-{
-  "mcpServers": {
-    "project-docker-gateway": {
-      "command": "docker",
-      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
-    },
-    "claude-in-chrome": { "enabled": true }
-  }
-}
-```
-
-`.docker-mcp.yaml`:
-```yaml
-servers:
-  - playwright
-  - context7
-```
-
-**Project B** (AWS infrastructure):
+**Project A** (Web development with browser automation):
 
 `.mcp.json`:
 ```json
@@ -272,6 +283,36 @@ servers:
   }
 }
 ```
+
+`.claude/settings.json`:
+```json
+{
+  "enabledMcpServers": ["claude-in-chrome"]
+}
+```
+
+`.docker-mcp.yaml`:
+```yaml
+servers:
+  - playwright
+  - context7
+```
+
+**Project B** (AWS infrastructure - no browser automation):
+
+`.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "project-docker-gateway": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--config", ".docker-mcp.yaml"]
+    }
+  }
+}
+```
+
+(No `.claude/settings.json` needed - uses global default)
 
 `.docker-mcp.yaml`:
 ```yaml
@@ -407,7 +448,9 @@ Archived MCPs are stored in the `archived` section of the registry and can be re
 
 ```
 <project>/                    # Project-local (primary)
-├── .mcp.json                 # Claude Code MCPs for this project
+├── .mcp.json                 # User-configured MCP servers (command/args format)
+├── .claude/
+│   └── settings.json         # Built-in MCP settings (enabledMcpServers, etc.)
 ├── .docker-mcp.yaml          # Docker gateway servers for this project
 └── CLAUDE.md                 # Session instructions
 
@@ -418,7 +461,7 @@ Archived MCPs are stored in the `archived` section of the registry and can be re
 ~/.claude/commands/           # Slash commands
 └── mcp-manage.md             # /mcp-manage slash command definition
 
-~/.claude.json                # Global fallback defaults
+~/.claude.json                # Global fallback defaults (claudeInChromeDefaultEnabled, etc.)
 ```
 
 ## Development
@@ -429,7 +472,9 @@ Archived MCPs are stored in the `archived` section of the registry and can be re
 mcpManager/
 ├── README.md                 # This file
 ├── CLAUDE.md                 # Claude Code session instructions
-├── .mcp.json                 # Claude Code MCPs for this project
+├── .mcp.json                 # User-configured MCP servers
+├── .claude/
+│   └── settings.json         # Built-in MCP settings
 ├── .docker-mcp.yaml          # Docker gateway servers for this project
 ├── docs/
 │   ├── PRD.md               # Product Requirements Document
@@ -509,10 +554,16 @@ cp ~/.config/claude-mcp/registry.json ~/.config/claude-mcp/registry.json.bak
 ```
 
 ### Changes not taking effect
-After modifying `.mcp.json` or `.docker-mcp.yaml`, restart your Claude Code session for changes to take effect.
+After modifying `.mcp.json`, `.claude/settings.json`, or `.docker-mcp.yaml`, restart your Claude Code session for changes to take effect.
 
 ### Missing project config
 If `.mcp.json` or `.docker-mcp.yaml` don't exist, run `/mcp-manage` and select "Initialize Project" to create them.
+
+### Schema validation error for claude-in-chrome
+If you see "Does not adhere to MCP server configuration schema" for claude-in-chrome:
+1. Remove `claude-in-chrome` from `.mcp.json`
+2. Create `.claude/settings.json` with `{"enabledMcpServers": ["claude-in-chrome"]}`
+3. Restart your Claude Code session
 
 ## License
 
